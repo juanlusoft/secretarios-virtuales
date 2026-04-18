@@ -55,8 +55,6 @@ services:
               capabilities: [gpu]
     command:
       - "${EMBEDDING_MODEL}"
-      - --task
-      - embed
       - --gpu-memory-utilization
       - "${GPU_MEMORY_EMBED:-0.10}"
       - --max-model-len
