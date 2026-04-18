@@ -1,0 +1,134 @@
+version: '3.8'
+
+services:
+  vllm-chat:
+    image: nvcr.io/nvidia/vllm:25.11-py3
+    container_name: sv-vllm-chat
+    restart: unless-stopped
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    command:
+      - vllm
+      - serve
+      - "${CHAT_MODEL}"
+      - --gpu-memory-utilization
+      - "${GPU_MEMORY_CHAT:-0.70}"
+      - --dtype
+      - auto
+      - --max-model-len
+      - "20000"
+      - --enable-prefix-caching
+    networks:
+      - sv-network
+    profiles: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  vllm-embedding:
+    image: nvcr.io/nvidia/vllm:25.11-py3
+    container_name: sv-vllm-embedding
+    restart: unless-stopped
+    environment:
+      - HF_TOKEN=${HF_TOKEN}
+    ports:
+      - "8001:8000"
+    volumes:
+      - ~/.cache/huggingface:/root/.cache/huggingface
+    ipc: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    command:
+      - vllm
+      - serve
+      - "${EMBEDDING_MODEL}"
+      - --task
+      - embed
+      - --gpu-memory-utilization
+      - "${GPU_MEMORY_EMBED:-0.10}"
+      - --max-model-len
+      - "8192"
+      - --dtype
+      - auto
+    networks:
+      - sv-network
+    profiles: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  whisper:
+    image: fedirz/faster-whisper-server:latest-cuda
+    container_name: sv-whisper
+    restart: unless-stopped
+    ports:
+      - "9000:8000"
+    environment:
+      - WHISPER__MODEL=${WHISPER_MODEL:-base}
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks:
+      - sv-network
+    profiles: [gpu]
+
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: sv-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-svuser}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-svpassword}
+      - POSTGRES_DB=${POSTGRES_DB:-secretarios}
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - sv-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-svuser}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: sv-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
+    networks:
+      - sv-network
+
+networks:
+  sv-network:
+    driver: bridge
