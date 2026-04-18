@@ -59,10 +59,16 @@ def parse_command(text: str):
         return ListSecretariesCommand()
 
     if m := _CREATE_PATTERN.search(text):
+        chat_id = m.group("chatid") or ""
+        if not chat_id:
+            raise ValueError(
+                "chat_id es obligatorio para crear un secretario. "
+                "Incluye 'chat_id: <valor>' en tu mensaje."
+            )
         return CreateSecretaryCommand(
             name=m.group("name"),
             telegram_token=m.group("token"),
-            telegram_chat_id=m.group("chatid") or "",
+            telegram_chat_id=chat_id,
         )
 
     if m := _DESTROY_PATTERN.search(text):
