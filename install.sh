@@ -45,14 +45,21 @@ step "1/7 · Actualizando lista de paquetes"
 sudo apt-get update -qq
 ok "Lista de paquetes actualizada"
 
-# ─── 2. Python 3.11 ─────────────────────────────────────────────────────────
-step "2/7 · Python 3.11"
+# ─── 2. Python 3.11+ ────────────────────────────────────────────────────────
+step "2/7 · Python 3.11+"
 
 if command -v python3.11 &>/dev/null; then
     ok "Python 3.11 ya instalado: $(python3.11 --version)"
     PYTHON_BIN="$(command -v python3.11)"
+elif command -v python3.12 &>/dev/null; then
+    ok "Python 3.12 detectado (compatible): $(python3.12 --version)"
+    PYTHON_BIN="$(command -v python3.12)"
+    sudo apt-get install -y python3.12-venv python3.12-dev build-essential
 else
-    info "Python 3.11 no encontrado. Instalando..."
+    info "Python 3.11 no encontrado. Instalando via deadsnakes PPA..."
+    sudo apt-get install -y software-properties-common
+    sudo add-apt-repository -y ppa:deadsnakes/ppa
+    sudo apt-get update -qq
     sudo apt-get install -y python3.11 python3.11-venv python3.11-dev build-essential
     ok "Python 3.11 instalado"
     PYTHON_BIN="$(command -v python3.11)"
