@@ -1,4 +1,8 @@
+import re
+
 from openai import AsyncOpenAI
+
+_THINK_RE = re.compile(r"<think>.*?</think>", re.DOTALL)
 
 
 class ChatClient:
@@ -20,4 +24,5 @@ class ChatClient:
             model=self._model,
             messages=all_messages,  # type: ignore[arg-type]
         )
-        return response.choices[0].message.content or ""
+        content = response.choices[0].message.content or ""
+        return _THINK_RE.sub("", content).strip()
