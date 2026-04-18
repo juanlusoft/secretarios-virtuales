@@ -4,6 +4,7 @@ import logging
 import os
 import subprocess
 import sys
+import time
 from uuid import UUID
 
 import asyncpg
@@ -17,6 +18,9 @@ class Supervisor:
         self._dsn = dsn
         self._redis_url = redis_url
         self._processes: dict[UUID, asyncio.subprocess.Process] = {}
+        self._orchestrator_proc: asyncio.subprocess.Process | None = None
+        self._orchestrator_start_time: float = 0.0
+        self._orchestrator_backoff: float = 5.0
 
     async def _spawn(self, employee_id: UUID) -> None:
         if employee_id in self._processes:
@@ -42,9 +46,21 @@ class Supervisor:
                 proc.kill()
         logger.info("Secretary %s terminated", employee_id)
 
+    async def _spawn_orchestrator(self) -> None:
+        """Spawn the orchestrator process and record the start time."""
+        logger.info("Spawning orchestrator")
+        self._orchestrator_proc = await asyncio.create_subprocess_exec(
+            sys.executable, "-m", "orchestrator",
+            cwd=os.getcwd(),
+        )
+        self._orchestrator_start_time = time.monotonic()
+        logger.info("Orchestrator spawned (pid %s)", self._orchestrator_proc.pid)
+
     async def _monitor_processes(self) -> None:
         while True:
             await asyncio.sleep(30)
+
+            # ── Monitor secretary processes ──────────────────────────────────
             conn = await asyncpg.connect(self._dsn)
             active_ids = {
                 row["id"]
@@ -59,6 +75,27 @@ class Supervisor:
                 if proc.returncode is not None and employee_id in active_ids:
                     logger.warning("Secretary %s crashed (code %s), restarting", employee_id, proc.returncode)
                     await self._spawn(employee_id)
+
+            # ── Monitor orchestrator process ─────────────────────────────────
+            if self._orchestrator_proc is not None and self._orchestrator_proc.returncode is not None:
+                uptime = time.monotonic() - self._orchestrator_start_time
+                exit_code = self._orchestrator_proc.returncode
+                logger.error(
+                    "Orchestrator exited (code %s, uptime %.1fs). Restarting in %.0fs...",
+                    exit_code, uptime, self._orchestrator_backoff,
+                )
+
+                # Reset backoff if the process ran successfully for > 30 s
+                if uptime > 30:
+                    self._orchestrator_backoff = 5.0
+                    logger.info("Orchestrator uptime > 30s — backoff reset to 5s")
+
+                await asyncio.sleep(self._orchestrator_backoff)
+
+                # Exponential backoff capped at 60 s
+                self._orchestrator_backoff = min(self._orchestrator_backoff * 2, 60.0)
+
+                await self._spawn_orchestrator()
 
     async def _listen_lifecycle(self) -> None:
         r = await aioredis.from_url(self._redis_url)
@@ -88,11 +125,7 @@ class Supervisor:
             await self._spawn(row["id"])
 
         # Also spawn orchestrator
-        orchestrator_proc = await asyncio.create_subprocess_exec(
-            sys.executable, "-m", "orchestrator",
-            cwd=os.getcwd(),
-        )
-        logger.info("Orchestrator spawned (pid %s)", orchestrator_proc.pid)
+        await self._spawn_orchestrator()
 
         await asyncio.gather(
             self._monitor_processes(),
