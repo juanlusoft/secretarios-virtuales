@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from pathlib import Path
 from uuid import UUID
@@ -137,4 +138,7 @@ class OrchestratorAgent(SecretaryAgent):
         app.add_handler(MessageHandler(filters.PHOTO, self._handle_photo))
 
         logger.info("OrchestratorAgent starting (chat_id=%s)", self._allowed_chat_id)
-        await app.run_polling(drop_pending_updates=True)
+        async with app:
+            await app.updater.start_polling(drop_pending_updates=True)
+            await app.start()
+            await asyncio.Event().wait()
