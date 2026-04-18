@@ -270,7 +270,7 @@ Group=${CURRENT_USER}
 WorkingDirectory=${SCRIPT_DIR}
 Environment="PATH=${VENV_DIR}/bin:/usr/local/bin:/usr/bin:/bin"
 EnvironmentFile=${SCRIPT_DIR}/.env
-ExecStartPre=/bin/bash -c '${DOCKER_CMD} compose -f ${SCRIPT_DIR}/infrastructure/docker-compose.yml up -d postgres redis'
+ExecStartPre=/bin/bash -c '${DOCKER_CMD} compose -f ${SCRIPT_DIR}/infrastructure/docker-compose.yml --profile gpu up -d'
 ExecStart=${VENV_DIR}/bin/python -m supervisor
 Restart=always
 RestartSec=10
