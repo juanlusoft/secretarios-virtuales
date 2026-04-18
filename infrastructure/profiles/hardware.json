@@ -12,11 +12,11 @@
   "rtx3090": {
     "min_vram_gb": 24,
     "chat_model": "Qwen/Qwen2.5-14B-Instruct-FP8",
-    "embedding_model": "Qwen/Qwen3-Embedding-4B",
-    "embedding_dim": 2560,
+    "embedding_model": "BAAI/bge-m3",
+    "embedding_dim": 1024,
     "whisper_model": "medium",
-    "gpu_memory_chat": 0.55,
-    "gpu_memory_embed": 0.25,
+    "gpu_memory_chat": 0.70,
+    "gpu_memory_embed": 0.05,
     "max_users": 10
   },
   "rtx3080_12gb": {
