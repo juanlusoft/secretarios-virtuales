@@ -51,7 +51,7 @@ async def main(employee_id_str: str) -> None:
     store = CredentialStore(fernet_key)
     bot_token = store.decrypt(enc_token)
 
-    pool = DatabasePool(os.environ["DATABASE_URL"], employee_id)
+    pool = DatabasePool(os.environ["APP_DB_URL"], employee_id)
     await pool.connect()
 
     agent = SecretaryAgent(
