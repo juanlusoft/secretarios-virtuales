@@ -25,21 +25,21 @@ class ListSecretariesCommand:
     pass
 
 
-# Matches: "crea [un] secretario para X ... TOKEN CHATID"
-# TOKEN format: digits:alphanum (Telegram bot token)
-# CHATID: sequence of digits (5-15 chars)
+# Telegram bot token pattern: 10-12 digits : 30-60 alphanum chars
+_TOKEN_RE = re.compile(r"\d{5,12}:[\w_-]{30,60}")
+
+# Matches any natural variation of "create a secretary for X":
+# crea/créale/haz/hazle/configura/añade/agrega un secretario/bot/asistente para/a/de X
 _CREATE_PATTERN = re.compile(
-    r"crea\s+(?:un\s+)?secretario\s+(?:para\s+)?(?P<name>\w+)"
-    r".*?"
-    r"(?:token[:\s]+)?(?P<token>\d{5,12}:[\w_-]{30,60})"
-    r".*?"
-    r"(?:chat_?id[:\s]+)?(?P<chatid>\d{5,15})",
-    re.IGNORECASE | re.DOTALL,
+    r"(?:crea(?:le)?|haz(?:le)?|configura|a[ñn]ade|agrega|registra|pon(?:le)?)\s+"
+    r"(?:(?:un|el|al?)\s+)?(?:secretario|bot|asistente)\s+"
+    r"(?:para\s+|a\s+|de\s+|al?\s+)?(?P<name>\w+)",
+    re.IGNORECASE,
 )
 
-# Matches: "destruye/elimina/borra secretario de X"
+# Matches: "destruye/elimina/borra/quita secretario de X"
 _DESTROY_PATTERN = re.compile(
-    r"(?:destruye|elimina|borra)\s+(?:(?:al?\s+)?secretario\s+(?:de\s+)?)?(?P<name>\w+)",
+    r"(?:destruye|elimina|borra|quita|desactiva)\s+(?:(?:al?\s+)?secretario\s+(?:de\s+)?)?(?P<name>\w+)",
     re.IGNORECASE,
 )
 
@@ -63,15 +63,22 @@ def parse_command(text: str):
         return ListSecretariesCommand()
 
     if m := _CREATE_PATTERN.search(text):
-        chat_id = m.group("chatid") or ""
-        if not chat_id:
+        token_m = _TOKEN_RE.search(text)
+        # Extract chatid: last standalone number of 5-15 digits not part of token
+        text_no_token = _TOKEN_RE.sub("", text)
+        chatid_m = re.search(r"(?<!\d)(\d{5,15})(?!\d)", text_no_token)
+
+        token = token_m.group(0) if token_m else ""
+        chat_id = chatid_m.group(1) if chatid_m else ""
+
+        if not token or not chat_id:
             raise ValueError(
-                "chat_id es obligatorio para crear un secretario. "
-                "Incluye el chat_id numérico en tu mensaje."
+                "Para crear un secretario necesito el token del bot y el chat_id.\n"
+                "Ejemplo: crea un secretario para María, token 123456:ABC... chatid 987654321"
             )
         return CreateSecretaryCommand(
             name=m.group("name"),
-            telegram_token=m.group("token"),
+            telegram_token=token,
             telegram_chat_id=chat_id,
         )
 
