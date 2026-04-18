@@ -5,4 +5,4 @@ target-version = "py311"
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
 [lint.isort]
-known-first-party = ["shared", "secretary", "orchestrator", "supervisor"]
+known-first-party = ["shared", "secretary", "orchestrator", "supervisor", "infrastructure"]
