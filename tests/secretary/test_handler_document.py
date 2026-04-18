@@ -1,7 +1,8 @@
-import pytest
-from pathlib import Path
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
+
+import pytest
+
 from secretary.handlers.document import handle_document
 
 pytestmark = pytest.mark.asyncio
@@ -52,14 +53,7 @@ async def test_creates_employee_directory(tmp_path):
     assert (tmp_path / str(employee_id)).is_dir()
 
 
-@pytest.mark.parametrize("bad_filename", [
-    "../../etc/passwd",
-    "../secret.txt",
-    "/etc/passwd",
-    "",
-    ".",
-    "..",
-])
+@pytest.mark.parametrize("bad_filename", ["", ".", ".."])
 async def test_rejects_path_traversal_filenames(tmp_path, bad_filename):
     employee_id = uuid4()
     repo = AsyncMock()
@@ -94,7 +88,17 @@ async def test_rejects_empty_filename(tmp_path):
         )
 
 
-async def test_strips_directory_prefix_and_saves_safely(tmp_path):
+@pytest.mark.parametrize(
+    "input_name, expected_name",
+    [
+        ("../../etc/passwd", "passwd"),
+        ("../secret.txt", "secret.txt"),
+        ("/etc/passwd", "passwd"),
+    ],
+)
+async def test_strips_directory_prefix_and_saves_safely(
+    tmp_path, input_name, expected_name
+):
     """A traversal filename like ../../evil.txt has its directory stripped;
     the resulting bare name "evil.txt" is saved inside employee_dir normally."""
     employee_id = uuid4()
@@ -106,7 +110,7 @@ async def test_strips_directory_prefix_and_saves_safely(tmp_path):
     with patch("secretary.handlers.document._extract_text", return_value=""):
         response = await handle_document(
             file_bytes=b"safe content",
-            filename="../../evil.txt",
+            filename=input_name,
             mime_type="text/plain",
             employee_id=employee_id,
             documents_dir=tmp_path,
@@ -114,7 +118,6 @@ async def test_strips_directory_prefix_and_saves_safely(tmp_path):
             embed=embed,
         )
 
-    # File must be inside employee_dir, not two levels up
-    saved_path = tmp_path / str(employee_id) / "evil.txt"
+    saved_path = tmp_path / str(employee_id) / expected_name
     assert saved_path.exists()
-    assert "evil.txt" in response
+    assert expected_name in response

@@ -1,33 +1,30 @@
 import asyncio
 import logging
 import os
-import sys
 from pathlib import Path
-from uuid import UUID
 
 import asyncpg
 from dotenv import load_dotenv
 
-load_dotenv()
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s"
-)
-
+from orchestrator.agent import OrchestratorAgent
 from shared.audio.whisper import WhisperClient
-from shared.crypto import CredentialStore
 from shared.db.pool import DatabasePool
 from shared.llm.chat import ChatClient
 from shared.llm.embeddings import EmbeddingClient
-from orchestrator.agent import OrchestratorAgent
+
+load_dotenv()
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(name)s %(levelname)s %(message)s",
+)
 
 
 async def main() -> None:
     bot_token = os.environ["ORCHESTRATOR_BOT_TOKEN"]
     chat_id = os.environ["ORCHESTRATOR_CHAT_ID"]
-    dsn = os.environ["DATABASE_URL"]
+    dsn = os.environ.get("APP_DB_URL", os.environ["DATABASE_URL"])
     fernet_key = os.environ["FERNET_KEY"].encode()
 
-    # Find or create orchestrator employee record
     conn = await asyncpg.connect(dsn)
     row = await conn.fetchrow(
         "SELECT id, name FROM employees WHERE is_orchestrator = true AND is_active = true"
@@ -47,7 +44,7 @@ async def main() -> None:
         employee_name = row["name"]
     await conn.close()
 
-    pool = DatabasePool(os.environ["APP_DB_URL"], employee_id)
+    pool = DatabasePool(dsn, employee_id)
     await pool.connect()
 
     agent = OrchestratorAgent(

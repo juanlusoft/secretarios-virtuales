@@ -2,7 +2,6 @@ import asyncio
 import json
 import logging
 import os
-import subprocess
 import sys
 import time
 from uuid import UUID
@@ -42,7 +41,7 @@ class Supervisor:
             proc.terminate()
             try:
                 await asyncio.wait_for(proc.wait(), timeout=10.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 proc.kill()
         logger.info("Secretary %s terminated", employee_id)
 
@@ -73,11 +72,18 @@ class Supervisor:
             for employee_id in list(self._processes.keys()):
                 proc = self._processes[employee_id]
                 if proc.returncode is not None and employee_id in active_ids:
-                    logger.warning("Secretary %s crashed (code %s), restarting", employee_id, proc.returncode)
+                    logger.warning(
+                        "Secretary %s crashed (code %s), restarting",
+                        employee_id,
+                        proc.returncode,
+                    )
                     await self._spawn(employee_id)
 
             # ── Monitor orchestrator process ─────────────────────────────────
-            if self._orchestrator_proc is not None and self._orchestrator_proc.returncode is not None:
+            if (
+                self._orchestrator_proc is not None
+                and self._orchestrator_proc.returncode is not None
+            ):
                 uptime = time.monotonic() - self._orchestrator_start_time
                 exit_code = self._orchestrator_proc.returncode
                 logger.error(
@@ -98,18 +104,33 @@ class Supervisor:
                 await self._spawn_orchestrator()
 
     async def _listen_lifecycle(self) -> None:
-        r = await aioredis.from_url(self._redis_url)
-        pubsub = r.pubsub()
-        await pubsub.subscribe("secretary.lifecycle")
-        async for message in pubsub.listen():
-            if message["type"] != "message":
-                continue
-            data = json.loads(message["data"])
-            employee_id = UUID(data["employee_id"])
-            if data["event"] == "created":
-                await self._spawn(employee_id)
-            elif data["event"] == "destroyed":
-                await self._terminate(employee_id)
+        retry_delay = 1.0
+        while True:
+            try:
+                r = aioredis.from_url(self._redis_url)  # type: ignore[no-untyped-call]
+                pubsub = r.pubsub()
+                await pubsub.subscribe("secretary.lifecycle")
+                logger.info("Lifecycle listener subscribed to secretary.lifecycle")
+                retry_delay = 1.0
+
+                async for message in pubsub.listen():
+                    if message["type"] != "message":
+                        continue
+                    data = json.loads(message["data"])
+                    employee_id = UUID(data["employee_id"])
+                    if data["event"] == "created":
+                        await self._spawn(employee_id)
+                    elif data["event"] == "destroyed":
+                        await self._terminate(employee_id)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception(
+                    "Lifecycle listener error; retrying in %.1fs",
+                    retry_delay,
+                )
+                await asyncio.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, 60.0)
 
     async def run(self) -> None:
         logger.info("Supervisor starting")

@@ -1,3 +1,5 @@
+import pytest
+
 from orchestrator.parser import (
     CreateSecretaryCommand,
     DestroySecretaryCommand,
@@ -39,7 +41,5 @@ def test_returns_none_for_unknown():
 
 
 def test_parse_create_without_chatid():
-    cmd = parse_command("crea secretario para Juan, token: tok123")
-    assert isinstance(cmd, CreateSecretaryCommand)
-    assert cmd.name == "Juan"
-    assert cmd.telegram_token == "tok123"
+    with pytest.raises(ValueError, match="chat_id es obligatorio"):
+        parse_command("crea secretario para Juan, token: tok123")

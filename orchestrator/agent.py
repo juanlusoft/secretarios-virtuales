@@ -16,7 +16,6 @@ from orchestrator.parser import (
 )
 from secretary.agent import SecretaryAgent
 from shared.audio.whisper import WhisperClient
-from shared.crypto import CredentialStore
 from shared.db.pool import DatabasePool
 from shared.llm.chat import ChatClient
 from shared.llm.embeddings import EmbeddingClient
@@ -56,14 +55,19 @@ class OrchestratorAgent(SecretaryAgent):
             redis_url=redis_url,
             fernet_key=fernet_key,
         )
-        self._dsn = dsn
 
     async def _handle_admin_command(
         self, update: Update, context: ContextTypes.DEFAULT_TYPE
     ) -> bool:
         """Try to handle as admin command. Returns True if handled."""
+        del context
+
         msg = update.message.text or ""  # type: ignore[union-attr]
-        command = parse_command(msg)
+        try:
+            command = parse_command(msg)
+        except ValueError as exc:
+            await update.message.reply_text(str(exc))  # type: ignore[union-attr]
+            return True
 
         if command is None:
             return False
@@ -74,7 +78,10 @@ class OrchestratorAgent(SecretaryAgent):
                 text = "No hay secretarios activos."
             else:
                 lines = [
-                    f"{'✅' if s['is_active'] else '❌'} {s['name']} — chat_id: {s['telegram_chat_id']}"
+                    (
+                        f"{'OK' if s['is_active'] else 'OFF'} "
+                        f"{s['name']} - chat_id: {s['telegram_chat_id']}"
+                    )
                     for s in secretaries
                 ]
                 text = "Secretarios:\n" + "\n".join(lines)
@@ -88,36 +95,48 @@ class OrchestratorAgent(SecretaryAgent):
                 telegram_chat_id=command.telegram_chat_id,
             )
             await update.message.reply_text(  # type: ignore[union-attr]
-                f"✅ Secretario {command.name} creado (id: {employee_id}).\n"
-                f"El supervisor lo arrancará en breve."
+                f"Secretario {command.name} creado (id: {employee_id}).\n"
+                "El supervisor lo arrancara en breve."
             )
             return True
 
         if isinstance(command, DestroySecretaryCommand):
             secretaries = await self._admin.list_secretaries()
             match = next(
-                (s for s in secretaries if s["name"].lower() == command.name.lower()), None
+                (s for s in secretaries if s["name"].lower() == command.name.lower()),
+                None,
             )
             if not match:
-                await update.message.reply_text(f"❌ No encontré secretario con nombre {command.name}.")  # type: ignore[union-attr]
+                await update.message.reply_text(  # type: ignore[union-attr]
+                    f"No encontre secretario con nombre {command.name}."
+                )
                 return True
+
             await self._admin.destroy_secretary(UUID(str(match["id"])))
-            await update.message.reply_text(f"🗑 Secretario {command.name} eliminado.")  # type: ignore[union-attr]
+            await update.message.reply_text(  # type: ignore[union-attr]
+                f"Secretario {command.name} eliminado."
+            )
             return True
 
         if isinstance(command, SendMessageCommand):
             secretaries = await self._admin.list_secretaries()
             match = next(
-                (s for s in secretaries if s["name"].lower() == command.name.lower()), None
+                (s for s in secretaries if s["name"].lower() == command.name.lower()),
+                None,
             )
             if not match:
-                await update.message.reply_text(f"❌ No encontré secretario con nombre {command.name}.")  # type: ignore[union-attr]
+                await update.message.reply_text(  # type: ignore[union-attr]
+                    f"No encontre secretario con nombre {command.name}."
+                )
                 return True
+
             await self._admin.send_message_to_secretary(
                 employee_id=UUID(str(match["id"])),
                 content=command.message,
             )
-            await update.message.reply_text(f"✅ Mensaje enviado a {command.name}.")  # type: ignore[union-attr]
+            await update.message.reply_text(  # type: ignore[union-attr]
+                f"Mensaje enviado a {command.name}."
+            )
             return True
 
         return False
@@ -129,7 +148,7 @@ class OrchestratorAgent(SecretaryAgent):
             return
         await super()._handle_text(update, context)
 
-    async def run(self, bot_token: str) -> None:  # type: ignore[override]
+    async def run(self, bot_token: str) -> None:
         app = Application.builder().token(bot_token).build()
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_text))
         app.add_handler(MessageHandler(filters.COMMAND, self._handle_text))
@@ -139,6 +158,9 @@ class OrchestratorAgent(SecretaryAgent):
 
         logger.info("OrchestratorAgent starting (chat_id=%s)", self._allowed_chat_id)
         async with app:
-            await app.updater.start_polling(drop_pending_updates=True)
+            if app.updater is None:
+                raise RuntimeError("Telegram updater is not available")
+
             await app.start()
+            await app.updater.start_polling(drop_pending_updates=True)
             await asyncio.Event().wait()

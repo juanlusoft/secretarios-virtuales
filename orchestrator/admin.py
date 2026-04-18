@@ -1,5 +1,5 @@
 import json
-import os
+from typing import Any, cast
 from uuid import UUID
 
 import asyncpg
@@ -27,7 +27,7 @@ class AdminService:
 
         conn = await asyncpg.connect(self._dsn)
         try:
-            employee_id = await conn.fetchval(
+            employee_id_raw = await conn.fetchval(
                 """
                 INSERT INTO employees (name, telegram_chat_id)
                 VALUES ($1, $2)
@@ -35,6 +35,9 @@ class AdminService:
                 """,
                 name, telegram_chat_id,
             )
+            if employee_id_raw is None:
+                raise RuntimeError("Failed to create employee")
+            employee_id = cast(UUID, employee_id_raw)
             await conn.execute(
                 "SELECT set_config('app.current_employee_id', $1, true)", str(employee_id)
             )
@@ -50,7 +53,7 @@ class AdminService:
             await conn.close()
 
         import redis.asyncio as aioredis
-        r = aioredis.from_url(self._redis_url)
+        r = aioredis.from_url(self._redis_url)  # type: ignore[no-untyped-call]
         await r.publish("secretary.lifecycle", json.dumps({
             "event": "created",
             "employee_id": str(employee_id),
@@ -69,14 +72,14 @@ class AdminService:
             await conn.close()
 
         import redis.asyncio as aioredis
-        r = aioredis.from_url(self._redis_url)
+        r = aioredis.from_url(self._redis_url)  # type: ignore[no-untyped-call]
         await r.publish("secretary.lifecycle", json.dumps({
             "event": "destroyed",
             "employee_id": str(employee_id),
         }))
         await r.aclose()
 
-    async def list_secretaries(self) -> list[dict]:
+    async def list_secretaries(self) -> list[dict[str, Any]]:
         conn = await asyncpg.connect(self._dsn)
         try:
             rows = await conn.fetch(
@@ -95,7 +98,7 @@ class AdminService:
         self, employee_id: UUID, content: str
     ) -> None:
         import redis.asyncio as aioredis
-        r = aioredis.from_url(self._redis_url)
+        r = aioredis.from_url(self._redis_url)  # type: ignore[no-untyped-call]
         await r.publish(
             f"secretary.{employee_id}",
             json.dumps({"type": "admin_message", "content": content}),

@@ -1,8 +1,9 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
-from supervisor.supervisor import Supervisor
 
+import pytest
+
+from supervisor.supervisor import Supervisor
 
 pytestmark = pytest.mark.asyncio
 

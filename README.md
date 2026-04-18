@@ -120,6 +120,8 @@ Copia `.env.example` a `.env` y rellena los valores. El wizard de configuración
 POSTGRES_USER=svuser
 POSTGRES_PASSWORD=svpassword
 DATABASE_URL=postgresql://svuser:svpassword@localhost:5432/secretarios
+APP_DB_PASSWORD=<auto-generada por setup>
+APP_DB_URL=postgresql://svapp:${APP_DB_PASSWORD}@localhost:5432/secretarios
 
 # Redis
 REDIS_PASSWORD=svredispass
@@ -266,6 +268,28 @@ secretarios-virtuales/
 - **Credenciales cifradas:** Los tokens de Telegram y credenciales de email se almacenan cifrados con Fernet.
 - **Acceso restringido:** Cada bot solo responde al `chat_id` autorizado de su empleado.
 - **Sin dependencias cloud:** Los LLMs se ejecutan localmente. Ningún mensaje sale de tu servidor.
+- **Mínimo privilegio en runtime:** los procesos principales usan `APP_DB_URL` para operar con el rol `svapp` sujeto a RLS.
+- **Resiliencia de control:** el listener de ciclo de vida en Redis (supervisor) reintenta con backoff automático ante fallos de red.
+
+### Hardening aplicado (2026-04-19)
+
+Cambios cerrados para producción:
+
+1. **Redis lifecycle robusto**
+   - Reintento con backoff exponencial en `supervisor._listen_lifecycle()` para reconectar automáticamente si Redis cae.
+2. **Sin contraseña estática de `svapp`**
+   - `init.sql` ya no define password hardcodeada.
+   - `infrastructure.setup` genera `APP_DB_PASSWORD` aleatoria y ejecuta `ALTER ROLE svapp ...`.
+3. **Instalación de `uv` con verificación de integridad**
+   - `install.sh` valida SHA256 del instalador antes de ejecutarlo.
+4. **Reducción de superficie privilegiada**
+   - `secretary`, `orchestrator` y `supervisor` arrancan con `APP_DB_URL` (fallback a `DATABASE_URL` solo por compatibilidad).
+
+Validación actual del repo tras hardening:
+
+- `python -m ruff check .` -> OK
+- `python -m mypy shared secretary orchestrator supervisor infrastructure` -> OK
+- `python -m pytest -q` -> OK (`42 passed`, `5 skipped` por tests de integración DB si PostgreSQL local no está levantado)
 
 ---
 

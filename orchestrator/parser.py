@@ -57,7 +57,15 @@ _LIST_PATTERN = re.compile(
 )
 
 
-def parse_command(text: str):
+def parse_command(
+    text: str,
+) -> (
+    CreateSecretaryCommand
+    | DestroySecretaryCommand
+    | SendMessageCommand
+    | ListSecretariesCommand
+    | None
+):
     """Parse natural language owner command. Returns a command dataclass or None."""
     if m := _LIST_PATTERN.search(text):
         return ListSecretariesCommand()

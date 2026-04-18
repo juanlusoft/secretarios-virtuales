@@ -1,7 +1,9 @@
-import pytest
 from unittest.mock import AsyncMock
-from shared.email.models import EmailMessage
+
+import pytest
+
 from secretary.handlers.email import handle_check_email, handle_send_email
+from shared.email.models import EmailMessage
 
 pytestmark = pytest.mark.asyncio
 

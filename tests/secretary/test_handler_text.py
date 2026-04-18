@@ -1,5 +1,7 @@
-import pytest
 from unittest.mock import AsyncMock
+
+import pytest
+
 from secretary.handlers.text import handle_text
 
 pytestmark = pytest.mark.asyncio

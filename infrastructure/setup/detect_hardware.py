@@ -2,6 +2,7 @@ import json
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, cast
 
 PROFILES_PATH = Path(__file__).parent.parent / "profiles" / "hardware.json"
 
@@ -18,8 +19,9 @@ class Profile:
     max_users: int
 
 
-def _load_profiles() -> dict:
-    return json.loads(PROFILES_PATH.read_text())
+def _load_profiles() -> dict[str, dict[str, Any]]:
+    raw = json.loads(PROFILES_PATH.read_text())
+    return cast(dict[str, dict[str, Any]], raw)
 
 
 def detect_hardware() -> Profile:

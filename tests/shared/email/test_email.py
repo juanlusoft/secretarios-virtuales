@@ -1,7 +1,9 @@
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+
 from shared.email.client import EmailClient
-from shared.email.models import EmailConfig, EmailMessage
+from shared.email.models import EmailConfig
 
 pytestmark = pytest.mark.asyncio
 

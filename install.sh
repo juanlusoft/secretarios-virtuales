@@ -74,8 +74,16 @@ else
     # Pinned uv version — update UV_VERSION here to upgrade
     UV_VERSION="0.7.3"
     UV_INSTALL_URL="https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-installer.sh"
+    UV_CHECKSUM_URL="${UV_INSTALL_URL}.sha256"
+    UV_INSTALLER="$(mktemp)"
     info "Instalando uv ${UV_VERSION}..."
-    curl -LsSf "${UV_INSTALL_URL}" | sh
+    curl -LsSf "${UV_INSTALL_URL}" -o "${UV_INSTALLER}"
+    EXPECTED_SHA="$(curl -LsSf "${UV_CHECKSUM_URL}" | awk '{print $1}')"
+    ACTUAL_SHA="$(sha256sum "${UV_INSTALLER}" | awk '{print $1}')"
+    [[ -n "${EXPECTED_SHA}" ]] || fail "No se pudo obtener el checksum de uv installer"
+    [[ "${EXPECTED_SHA}" == "${ACTUAL_SHA}" ]] || fail "Checksum de uv installer no coincide"
+    sh "${UV_INSTALLER}"
+    rm -f "${UV_INSTALLER}"
     # Añadir al PATH de la sesión actual
     export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
     if ! command -v uv &>/dev/null; then

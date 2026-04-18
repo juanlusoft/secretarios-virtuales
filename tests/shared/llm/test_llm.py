@@ -1,5 +1,7 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
 from shared.llm.chat import ChatClient
 from shared.llm.embeddings import EmbeddingClient
 

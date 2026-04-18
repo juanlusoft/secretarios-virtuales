@@ -1,6 +1,8 @@
-import pytest
 from unittest.mock import AsyncMock
 from uuid import uuid4
+
+import pytest
+
 from secretary.memory import MemoryManager
 
 pytestmark = pytest.mark.asyncio
@@ -29,8 +31,9 @@ async def test_build_context_empty(mock_repo, mock_embed):
 
 
 async def test_build_context_includes_conversations(mock_repo, mock_embed):
-    from shared.db.models import Conversation
     from datetime import datetime
+
+    from shared.db.models import Conversation
     conv = Conversation(
         id=uuid4(), employee_id=uuid4(), role="user",
         content="Reunión ayer", source="telegram", created_at=datetime.now()

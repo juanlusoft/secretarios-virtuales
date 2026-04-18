@@ -1,5 +1,8 @@
+import io
 from pathlib import Path
 from uuid import UUID
+
+import pypdf
 
 from shared.db.repository import Repository
 from shared.llm.embeddings import EmbeddingClient
@@ -10,8 +13,6 @@ def _extract_text(file_bytes: bytes, mime_type: str) -> str:
         return file_bytes.decode(errors="replace")
     if mime_type == "application/pdf":
         try:
-            import io
-            import pypdf
             reader = pypdf.PdfReader(io.BytesIO(file_bytes))
             return " ".join(page.extract_text() or "" for page in reader.pages)
         except Exception:
@@ -39,8 +40,9 @@ async def handle_document(
         raise ValueError("Invalid filename")
 
     # Resolve the full path and verify it stays inside employee_dir
-    filepath = (employee_dir / safe_name).resolve()
-    if not str(filepath).startswith(str(employee_dir.resolve())):
+    employee_root = employee_dir.resolve()
+    filepath = (employee_root / safe_name).resolve()
+    if employee_root not in filepath.parents:
         raise ValueError("Invalid filename")
 
     filepath.write_bytes(file_bytes)

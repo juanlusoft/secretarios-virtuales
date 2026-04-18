@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from contextlib import suppress
 from pathlib import Path
 from uuid import UUID
 
@@ -117,6 +118,8 @@ class SecretaryAgent:
         if not await self._is_authorized(update):
             return
         voice = update.message.voice  # type: ignore[union-attr]
+        if voice is None:
+            return
         file = await context.bot.get_file(voice.file_id)
         audio_bytes = await file.download_as_bytearray()
 
@@ -141,6 +144,8 @@ class SecretaryAgent:
         if not await self._is_authorized(update):
             return
         doc = update.message.document  # type: ignore[union-attr]
+        if doc is None:
+            return
         file = await context.bot.get_file(doc.file_id)
         file_bytes = await file.download_as_bytearray()
 
@@ -183,7 +188,7 @@ class SecretaryAgent:
         retry_delay = 1.0
         while True:
             try:
-                redis = await aioredis.from_url(self._redis_url)
+                redis = aioredis.from_url(self._redis_url)  # type: ignore[no-untyped-call]
                 pubsub = redis.pubsub()
                 await pubsub.subscribe(channel)
                 logger.info("Redis listener subscribed to channel %s", channel)
@@ -220,14 +225,15 @@ class SecretaryAgent:
             "Secretary %s starting (chat_id=%s)", self._employee_name, self._allowed_chat_id
         )
         async with app:
-            await app.updater.start_polling(drop_pending_updates=True)
+            if app.updater is None:
+                raise RuntimeError("Telegram updater is not available")
+
             await app.start()
+            await app.updater.start_polling(drop_pending_updates=True)
             redis_task = asyncio.create_task(self._listen_redis(app))
             try:
                 await asyncio.Event().wait()
             finally:
                 redis_task.cancel()
-                try:
+                with suppress(asyncio.CancelledError):
                     await redis_task
-                except asyncio.CancelledError:
-                    pass
