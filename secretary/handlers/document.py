@@ -31,18 +31,29 @@ async def handle_document(
     employee_dir = documents_dir / str(employee_id)
     employee_dir.mkdir(parents=True, exist_ok=True)
 
-    filepath = employee_dir / filename
+    # Strip any directory components to prevent path traversal
+    safe_name = Path(filename).name
+
+    # Reject empty or dot-only names
+    if not safe_name or safe_name.lstrip(".") == "":
+        raise ValueError("Invalid filename")
+
+    # Resolve the full path and verify it stays inside employee_dir
+    filepath = (employee_dir / safe_name).resolve()
+    if not str(filepath).startswith(str(employee_dir.resolve())):
+        raise ValueError("Invalid filename")
+
     filepath.write_bytes(file_bytes)
 
     content_text = _extract_text(file_bytes, mime_type)
-    embedding = await embed.embed(content_text or filename)
+    embedding = await embed.embed(content_text or safe_name)
 
     await repo.save_document(
-        filename=filename,
+        filename=safe_name,
         filepath=str(filepath),
         content_text=content_text,
         embedding=embedding,
         mime_type=mime_type,
     )
 
-    return f"✅ Documento guardado: {filename}"
+    return f"✅ Documento guardado: {safe_name}"
