@@ -71,8 +71,11 @@ step "3/7 · uv (gestor de paquetes Python)"
 if command -v uv &>/dev/null; then
     ok "uv ya instalado: $(uv --version)"
 else
-    info "uv no encontrado. Instalando..."
-    curl -LsSf https://astral.sh/uv/install.sh | sh
+    # Pinned uv version — update UV_VERSION here to upgrade
+    UV_VERSION="0.7.3"
+    UV_INSTALL_URL="https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-installer.sh"
+    info "Instalando uv ${UV_VERSION}..."
+    curl -LsSf "${UV_INSTALL_URL}" | sh
     # Añadir al PATH de la sesión actual
     export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
     if ! command -v uv &>/dev/null; then
