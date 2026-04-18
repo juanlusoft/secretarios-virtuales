@@ -20,7 +20,8 @@ class DatabasePool:
 
     @asynccontextmanager
     async def acquire(self) -> AsyncGenerator[asyncpg.Connection, None]:
-        assert self._pool is not None, "Call connect() first"
+        if self._pool is None:
+            raise RuntimeError("Call connect() first")
         async with self._pool.acquire() as conn:
             await conn.execute(
                 "SELECT set_config('app.current_employee_id', $1, true)",
