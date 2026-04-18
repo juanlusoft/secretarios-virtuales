@@ -47,7 +47,7 @@ async def main() -> None:
         employee_name = row["name"]
     await conn.close()
 
-    pool = DatabasePool(dsn, employee_id)
+    pool = DatabasePool(os.environ["APP_DB_URL"], employee_id)
     await pool.connect()
 
     agent = OrchestratorAgent(
