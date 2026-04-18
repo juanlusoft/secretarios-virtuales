@@ -5,8 +5,8 @@
     "embedding_model": "Qwen/Qwen3-Embedding-4B",
     "embedding_dim": 2560,
     "whisper_model": "large-v3",
-    "gpu_memory_chat": 0.60,
-    "gpu_memory_embed": 0.15,
+    "gpu_memory_chat": 0.55,
+    "gpu_memory_embed": 0.20,
     "max_users": 20
   },
   "rtx3090": {
@@ -15,8 +15,8 @@
     "embedding_model": "Qwen/Qwen3-Embedding-4B",
     "embedding_dim": 2560,
     "whisper_model": "medium",
-    "gpu_memory_chat": 0.65,
-    "gpu_memory_embed": 0.15,
+    "gpu_memory_chat": 0.55,
+    "gpu_memory_embed": 0.25,
     "max_users": 10
   },
   "rtx3080_12gb": {
