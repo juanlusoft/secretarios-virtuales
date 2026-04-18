@@ -10,8 +10,6 @@ TEST_DSN = "postgresql://svuser:svpassword@localhost:5432/secretarios"
 
 @pytest.fixture
 async def pool_and_employee():
-    """Crea un empleado de prueba y devuelve pool + employee_id."""
-    # Conexión sin RLS para setup
     conn = await __import__("asyncpg").connect(TEST_DSN)
     employee_id = uuid4()
     await conn.execute(
@@ -46,7 +44,6 @@ async def test_save_and_retrieve_conversation(pool_and_employee):
 async def test_isolation_between_employees(pool_and_employee):
     pool_a, id_a = pool_and_employee
 
-    # Empleado B
     conn_raw = await __import__("asyncpg").connect(TEST_DSN)
     id_b = uuid4()
     await conn_raw.execute(
@@ -64,7 +61,7 @@ async def test_isolation_between_employees(pool_and_employee):
         async with pool_b.acquire() as conn:
             convs = await Repository(conn, id_b).get_recent_conversations()
 
-        assert len(convs) == 0  # B no puede ver datos de A
+        assert len(convs) == 0
     finally:
         await pool_b.close()
         conn_raw = await __import__("asyncpg").connect(TEST_DSN)
@@ -74,13 +71,13 @@ async def test_isolation_between_employees(pool_and_employee):
 
 async def test_save_and_search_document(pool_and_employee):
     pool, employee_id = pool_and_employee
-    import os, tempfile, pathlib
+    import tempfile, pathlib
     tmp = pathlib.Path(tempfile.mkdtemp()) / str(employee_id)
     tmp.mkdir(parents=True, exist_ok=True)
     filepath = str(tmp / "test.txt")
     pathlib.Path(filepath).write_text("contenido de prueba")
 
-    embedding = [0.1] * 1024  # bge-m3 dim
+    embedding = [0.1] * 1024
 
     async with pool.acquire() as conn:
         repo = Repository(conn, employee_id)

@@ -52,7 +52,6 @@ class Repository:
         embedding: list[float],
         mime_type: str,
     ) -> UUID:
-        # pgvector acepta formato '[0.1,0.2,...]'
         vec_str = "[" + ",".join(str(x) for x in embedding) + "]"
         row = await self._conn.fetchrow(
             """
@@ -92,9 +91,7 @@ class Repository:
             for r in rows
         ]
 
-    async def get_employee_by_chat_id(
-        self, telegram_chat_id: str
-    ) -> UUID | None:
+    async def get_employee_by_chat_id(self, telegram_chat_id: str) -> UUID | None:
         row = await self._conn.fetchrow(
             """
             SELECT id FROM employees
@@ -104,9 +101,7 @@ class Repository:
         )
         return row["id"] if row else None
 
-    async def save_credential(
-        self, service_type: str, encrypted: str
-    ) -> None:
+    async def save_credential(self, service_type: str, encrypted: str) -> None:
         await self._conn.execute(
             """
             INSERT INTO credentials (employee_id, service_type, encrypted)
