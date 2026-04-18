@@ -25,12 +25,16 @@ class ListSecretariesCommand:
     pass
 
 
-# Matches: "crea secretario para X, token: T, chatid: C"
+# Matches: "crea [un] secretario para X ... TOKEN CHATID"
+# TOKEN format: digits:alphanum (Telegram bot token)
+# CHATID: sequence of digits (5-15 chars)
 _CREATE_PATTERN = re.compile(
-    r"crea\s+secretario\s+(?:para\s+)?(?P<name>\w+)[^,]*"
-    r",\s*token[:\s]+(?P<token>[\w:_-]+)"
-    r"(?:[^,]*,\s*chat_?id[:\s]+(?P<chatid>[\w-]+))?",
-    re.IGNORECASE,
+    r"crea\s+(?:un\s+)?secretario\s+(?:para\s+)?(?P<name>\w+)"
+    r".*?"
+    r"(?:token[:\s]+)?(?P<token>\d{5,12}:[\w_-]{30,60})"
+    r".*?"
+    r"(?:chat_?id[:\s]+)?(?P<chatid>\d{5,15})",
+    re.IGNORECASE | re.DOTALL,
 )
 
 # Matches: "destruye/elimina/borra secretario de X"
@@ -63,7 +67,7 @@ def parse_command(text: str):
         if not chat_id:
             raise ValueError(
                 "chat_id es obligatorio para crear un secretario. "
-                "Incluye 'chat_id: <valor>' en tu mensaje."
+                "Incluye el chat_id numérico en tu mensaje."
             )
         return CreateSecretaryCommand(
             name=m.group("name"),
