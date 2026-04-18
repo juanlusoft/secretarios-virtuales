@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from pathlib import Path
 from uuid import UUID
@@ -203,4 +204,7 @@ class SecretaryAgent:
         logger.info(
             "Secretary %s starting (chat_id=%s)", self._employee_name, self._allowed_chat_id
         )
-        await app.run_polling(drop_pending_updates=True)
+        async with app:
+            await app.updater.start_polling(drop_pending_updates=True)
+            await app.start()
+            await asyncio.Event().wait()
