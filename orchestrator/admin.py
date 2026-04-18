@@ -19,6 +19,12 @@ class AdminService:
         telegram_token: str,
         telegram_chat_id: str,
     ) -> UUID:
+        if not telegram_chat_id or not telegram_chat_id.strip():
+            raise ValueError(
+                "telegram_chat_id es obligatorio para crear un secretario. "
+                "Proporciona un chat_id de Telegram válido."
+            )
+
         conn = await asyncpg.connect(self._dsn)
         try:
             employee_id = await conn.fetchval(
