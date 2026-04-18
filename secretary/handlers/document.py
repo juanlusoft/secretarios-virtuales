@@ -1,0 +1,48 @@
+from pathlib import Path
+from uuid import UUID
+
+from shared.db.repository import Repository
+from shared.llm.embeddings import EmbeddingClient
+
+
+def _extract_text(file_bytes: bytes, mime_type: str) -> str:
+    if mime_type == "text/plain":
+        return file_bytes.decode(errors="replace")
+    if mime_type == "application/pdf":
+        try:
+            import io
+            import pypdf
+            reader = pypdf.PdfReader(io.BytesIO(file_bytes))
+            return " ".join(page.extract_text() or "" for page in reader.pages)
+        except Exception:
+            return ""
+    return ""
+
+
+async def handle_document(
+    file_bytes: bytes,
+    filename: str,
+    mime_type: str,
+    employee_id: UUID,
+    documents_dir: Path,
+    repo: Repository,
+    embed: EmbeddingClient,
+) -> str:
+    employee_dir = documents_dir / str(employee_id)
+    employee_dir.mkdir(parents=True, exist_ok=True)
+
+    filepath = employee_dir / filename
+    filepath.write_bytes(file_bytes)
+
+    content_text = _extract_text(file_bytes, mime_type)
+    embedding = await embed.embed(content_text or filename)
+
+    await repo.save_document(
+        filename=filename,
+        filepath=str(filepath),
+        content_text=content_text,
+        embedding=embedding,
+        mime_type=mime_type,
+    )
+
+    return f"✅ Documento guardado: {filename}"
