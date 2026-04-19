@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # install.sh — Secretarios Virtuales
-# Instala todas las dependencias del sistema, configura el proyecto y registra el servicio systemd.
-# Uso: bash install.sh
+# Uso: cd secretarios-virtuales && bash install.sh
 # Requiere: Ubuntu 22.04/24.04, conexión a internet, GPU NVIDIA recomendada.
 
 set -euo pipefail
@@ -24,7 +23,7 @@ step() { echo -e "\n${BOLD}══ $* ${NC}"; }
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVICE_NAME="secretarios"
 VENV_DIR="$SCRIPT_DIR/.venv"
-PYTHON_BIN=""          # se rellena al detectar/instalar Python
+PYTHON_BIN=""
 GPU_AVAILABLE=false
 
 # ─── Comprobación inicial ────────────────────────────────────────────────────
@@ -32,12 +31,29 @@ echo -e "\n${BOLD}╔═══════════════════�
 echo -e "${BOLD}║        SECRETARIOS VIRTUALES — INSTALADOR           ║${NC}"
 echo -e "${BOLD}╚══════════════════════════════════════════════════════╝${NC}\n"
 
+# Detectar ejecución via bash <(curl...) — SCRIPT_DIR sería /dev/fd o similar
+if [[ ! -f "$SCRIPT_DIR/pyproject.toml" ]]; then
+    echo -e "${RED}❌ Ejecuta el script desde dentro del repositorio clonado:${NC}"
+    echo ""
+    echo -e "  git clone https://github.com/juanlusoft/secretarios-virtuales.git"
+    echo -e "  cd secretarios-virtuales"
+    echo -e "  bash install.sh"
+    echo ""
+    exit 1
+fi
+
 if [[ $EUID -eq 0 ]]; then
-    fail "No ejecutes este script como root. Ejecútalo con tu usuario normal (el script usará sudo cuando haga falta)."
+    fail "No ejecutes este script como root. Ejecútalo con tu usuario normal."
 fi
 
 if ! command -v sudo &>/dev/null; then
     fail "sudo no está disponible. Instálalo primero: apt install sudo"
+fi
+
+# Actualizar repo si estamos en git
+if [[ -d "$SCRIPT_DIR/.git" ]]; then
+    info "Actualizando repositorio..."
+    git -C "$SCRIPT_DIR" pull --ff-only 2>/dev/null && ok "Repositorio actualizado" || warn "No se pudo hacer git pull (continuando)"
 fi
 
 # ─── 1. Sistema base ─────────────────────────────────────────────────────────
@@ -68,23 +84,18 @@ fi
 # ─── 3. uv ──────────────────────────────────────────────────────────────────
 step "3/7 · uv (gestor de paquetes Python)"
 
+# Asegurar rutas de uv en PATH
+export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+
 if command -v uv &>/dev/null; then
     ok "uv ya instalado: $(uv --version)"
 else
     info "Instalando uv (última versión estable)..."
     curl -LsSf https://astral.sh/uv/install.sh | sh
-    # Añadir al PATH de la sesión actual
-    export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
-    if ! command -v uv &>/dev/null; then
-        # Segundo intento con rutas conocidas
-        for candidate in "$HOME/.cargo/bin/uv" "$HOME/.local/bin/uv"; do
-            if [[ -x "$candidate" ]]; then
-                export PATH="$(dirname "$candidate"):$PATH"
-                break
-            fi
-        done
-    fi
-    command -v uv &>/dev/null || fail "No se pudo localizar uv tras instalarlo. Abre una nueva terminal y vuelve a ejecutar el script."
+    # Cargar env si existe
+    [[ -f "$HOME/.local/bin/env" ]] && source "$HOME/.local/bin/env" || true
+    export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+    command -v uv &>/dev/null || fail "No se pudo localizar uv. Abre una nueva terminal y vuelve a ejecutar el script."
     ok "uv instalado: $(uv --version)"
 fi
 
@@ -97,19 +108,15 @@ else
     if command -v docker &>/dev/null; then
         warn "Docker está instalado pero no accesible. Añadiendo usuario al grupo docker..."
         sudo usermod -aG docker "$USER"
-        warn "Es posible que necesites cerrar sesión y volver a entrar para que surta efecto."
-        warn "Continuando asumiendo que docker funcionará tras relogin..."
+        warn "Puede que necesites cerrar sesión y volver a entrar."
     else
         info "Docker no encontrado. Instalando..."
         curl -fsSL https://get.docker.com | sudo bash
         sudo usermod -aG docker "$USER"
         ok "Docker instalado"
-        warn "Se te ha añadido al grupo 'docker'. Si el script falla más adelante por permisos,"
-        warn "cierra sesión, vuelve a entrar y ejecuta el script de nuevo."
+        warn "Se te ha añadido al grupo 'docker'. Si falla por permisos, cierra sesión y vuelve a entrar."
     fi
-    # Intentar activar el socket en la sesión actual sin relogin
     if ! docker info &>/dev/null 2>&1; then
-        info "Intentando acceder a Docker mediante sudo para esta sesión..."
         sudo docker info &>/dev/null 2>&1 && DOCKER_CMD="sudo docker" || DOCKER_CMD="docker"
     fi
 fi
@@ -146,7 +153,7 @@ install_nvidia_drivers() {
     RECOMMENDED=$(ubuntu-drivers devices 2>/dev/null | grep recommended | awk '{print $3}' | head -1)
     if [[ -z "$RECOMMENDED" ]]; then
         RECOMMENDED="nvidia-driver-550"
-        warn "No se pudo determinar el driver recomendado automáticamente. Usando: $RECOMMENDED"
+        warn "No se pudo determinar el driver recomendado. Usando: $RECOMMENDED"
     else
         info "Driver recomendado: $RECOMMENDED"
     fi
@@ -156,7 +163,7 @@ install_nvidia_drivers() {
         sudo apt-get install -y "$RECOMMENDED"
         ok "Driver $RECOMMENDED instalado."
         echo -e "\n${YELLOW}${BOLD}El sistema necesita reiniciarse para activar los drivers NVIDIA.${NC}"
-        echo -e "${YELLOW}Tras el reinicio, vuelve a ejecutar este script: ${BOLD}bash install.sh${NC}"
+        echo -e "${YELLOW}Tras el reinicio, vuelve a ejecutar: ${BOLD}bash install.sh${NC}"
         read -rp "  ¿Reiniciar ahora? [S/n] " reboot_ans
         [[ "${reboot_ans,,}" == "n" ]] || sudo reboot
         exit 0
@@ -181,7 +188,6 @@ install_nvidia_container_toolkit() {
     ok "NVIDIA Container Toolkit instalado"
 }
 
-# Comprobar drivers
 if detect_nvidia_smi; then
     ok "Drivers NVIDIA ya instalados: $(nvidia-smi --query-gpu=name --format=csv,noheader | head -1)"
     GPU_AVAILABLE=true
@@ -192,7 +198,6 @@ else
     fi
 fi
 
-# Comprobar Container Toolkit
 if $GPU_AVAILABLE; then
     if dpkg -l nvidia-container-toolkit &>/dev/null 2>&1; then
         ok "NVIDIA Container Toolkit ya instalado"
@@ -200,13 +205,11 @@ if $GPU_AVAILABLE; then
         install_nvidia_container_toolkit
     fi
 
-    # Verificar que Docker puede acceder a la GPU
     info "Verificando acceso GPU desde Docker..."
     if $DOCKER_CMD run --rm --gpus all nvidia/cuda:12.0-base-ubuntu22.04 nvidia-smi &>/dev/null 2>&1; then
         ok "Docker accede correctamente a la GPU"
     else
-        warn "Docker no pudo acceder a la GPU. Continuando de todas formas."
-        warn "Si el problema persiste, ejecuta: sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker"
+        warn "Docker no pudo acceder a la GPU. Si persiste: sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker"
     fi
 fi
 
@@ -215,17 +218,17 @@ step "6/7 · Entorno Python y dependencias del proyecto"
 
 cd "$SCRIPT_DIR"
 
+# Corregir permisos de carpetas que Docker crea como root
+if [[ -d "$SCRIPT_DIR/infrastructure/data" ]]; then
+    sudo chown -R "$(id -u):$(id -g)" "$SCRIPT_DIR/infrastructure/data" 2>/dev/null || true
+fi
+
 if [[ -d "$VENV_DIR" ]]; then
     ok "Entorno virtual ya existe en $VENV_DIR"
 else
     info "Creando entorno virtual con uv..."
     uv venv "$VENV_DIR" --python python3.11
     ok "Entorno virtual creado"
-fi
-
-# Corregir permisos de carpetas creadas por Docker como root
-if [[ -d "$SCRIPT_DIR/infrastructure/data" ]]; then
-    sudo chown -R "$(id -u):$(id -g)" "$SCRIPT_DIR/infrastructure/data" 2>/dev/null || true
 fi
 
 info "Instalando dependencias Python..."
@@ -253,7 +256,6 @@ step "Configurando arranque automático (systemd)"
 
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 CURRENT_USER="$USER"
-CURRENT_HOME="$HOME"
 
 info "Creando $SERVICE_FILE ..."
 
@@ -272,7 +274,7 @@ Group=${CURRENT_USER}
 WorkingDirectory=${SCRIPT_DIR}
 Environment="PATH=${VENV_DIR}/bin:/usr/local/bin:/usr/bin:/bin"
 EnvironmentFile=${SCRIPT_DIR}/.env
-ExecStartPre=/bin/bash -c '${DOCKER_CMD} compose -f ${SCRIPT_DIR}/infrastructure/docker-compose.yml --profile gpu up -d'
+ExecStartPre=/bin/bash -c '${DOCKER_CMD} compose -f ${SCRIPT_DIR}/infrastructure/docker-compose.yml --profile gpu up -d --remove-orphans'
 ExecStart=${VENV_DIR}/bin/python -m supervisor
 Restart=always
 RestartSec=10
@@ -290,20 +292,21 @@ sudo systemctl daemon-reload
 sudo systemctl enable "$SERVICE_NAME"
 ok "Servicio '$SERVICE_NAME' habilitado para arranque automático"
 
-# Arrancar el servicio si .env existe y Docker está funcionando
 if [[ -f "$SCRIPT_DIR/.env" ]]; then
+    info "Limpiando contenedores huérfanos..."
+    $DOCKER_CMD container prune -f &>/dev/null || true
+
     info "Arrancando servicios Docker (postgres, redis)..."
-    $DOCKER_CMD compose -f "$SCRIPT_DIR/infrastructure/docker-compose.yml" up -d postgres redis
+    $DOCKER_CMD compose -f "$SCRIPT_DIR/infrastructure/docker-compose.yml" up -d postgres redis --remove-orphans
 
     if $GPU_AVAILABLE; then
         info "Arrancando modelos de IA (vLLM + Whisper) en Docker..."
-        $DOCKER_CMD compose -f "$SCRIPT_DIR/infrastructure/docker-compose.yml" --profile gpu up -d
-        info "Los modelos pueden tardar 5-15 minutos en cargar la primera vez (descarga desde HuggingFace)."
-        info "Puedes ver el progreso con: docker logs sv-vllm-chat -f"
+        $DOCKER_CMD compose -f "$SCRIPT_DIR/infrastructure/docker-compose.yml" --profile gpu up -d --remove-orphans
+        info "Los modelos pueden tardar 5-15 minutos en cargar la primera vez."
+        info "Progreso: docker logs sv-vllm-chat -f"
     else
-        warn "Sin GPU: los servicios de IA (vLLM, Whisper) NO se han arrancado."
-        warn "Arráncalos manualmente cuando tengas GPU disponible:"
-        warn "  docker compose -f infrastructure/docker-compose.yml --profile gpu up -d"
+        warn "Sin GPU: los servicios de IA no se han arrancado."
+        warn "Cuando tengas GPU: docker compose -f infrastructure/docker-compose.yml --profile gpu up -d"
     fi
 
     info "Arrancando servicio systemd..."
@@ -312,8 +315,7 @@ if [[ -f "$SCRIPT_DIR/.env" ]]; then
     if systemctl is-active --quiet "$SERVICE_NAME"; then
         ok "Servicio '$SERVICE_NAME' arrancado correctamente"
     else
-        warn "El servicio no parece estar activo todavía. Comprueba el estado con:"
-        warn "  journalctl -u $SERVICE_NAME -f"
+        warn "El servicio no está activo todavía. Comprueba: journalctl -u $SERVICE_NAME -f"
     fi
 fi
 
