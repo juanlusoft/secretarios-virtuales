@@ -48,6 +48,10 @@ class AdminService:
                 if employee_id_raw is None:
                     raise RuntimeError("Failed to create employee")
                 employee_id = cast(UUID, employee_id_raw)
+                await conn.execute(
+                    "SELECT set_config('app.current_employee_id', $1, true)",
+                    str(employee_id),
+                )
                 encrypted_token = self._store.encrypt(telegram_token)
                 await conn.execute(
                     """
