@@ -93,12 +93,23 @@ def build_onboarding_handler(agent) -> ConversationHandler:  # type: ignore[type
         if provider:
             context.user_data["email_provider"] = provider  # type: ignore[index]
             domain = email.split("@")[-1]
-            await update.message.reply_text(  # type: ignore[union-attr]
-                f"✅ Proveedor detectado: *{domain}*.\n\n"
-                "Ahora necesito tu contraseña.\n"
-                "_(Para Gmail usa una contraseña de aplicación)_",
-                parse_mode="Markdown",
-            )
+            is_gmail = domain in ("gmail.com", "googlemail.com")
+            if is_gmail:
+                password_msg = (
+                    f"✅ Proveedor detectado: *{domain}*.\n\n"
+                    "⚠️ *Gmail requiere una contraseña de aplicación*, no tu contraseña normal.\n\n"
+                    "Cómo obtenerla:\n"
+                    "1. Ve a myaccount.google.com/apppasswords\n"
+                    "2. Selecciona *Otra (nombre personalizado)* → escribe 'Secretario'\n"
+                    "3. Google te dará una clave de 16 caracteres\n\n"
+                    "Pégala aquí sin espacios:"
+                )
+            else:
+                password_msg = (
+                    f"✅ Proveedor detectado: *{domain}*.\n\n"
+                    "Introduce tu contraseña:"
+                )
+            await update.message.reply_text(password_msg, parse_mode="Markdown")  # type: ignore[union-attr]
             return EMAIL_PASS
         await update.message.reply_text(  # type: ignore[union-attr]
             "Dominio personalizado. Voy a pedirte los datos del servidor.\n\n"

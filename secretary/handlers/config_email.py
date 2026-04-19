@@ -92,6 +92,16 @@ class EmailConfigFlow:
         if step == _Step.USERNAME:
             self._data["username"] = text
             self._step = _Step.PASSWORD
+            domain = text.split("@")[-1].lower() if "@" in text else ""
+            if domain in ("gmail.com", "googlemail.com"):
+                return (
+                    "⚠️ *Gmail requiere una contraseña de aplicación*, no tu contraseña normal.\n\n"
+                    "Cómo obtenerla:\n"
+                    "1. Ve a myaccount.google.com/apppasswords\n"
+                    "2. Selecciona *Otra (nombre personalizado)* → escribe 'Secretario'\n"
+                    "3. Google te dará una clave de 16 caracteres\n\n"
+                    "Pégala aquí sin espacios:"
+                ), False
             return _PROMPTS[_Step.PASSWORD], False
 
         if step == _Step.PASSWORD:
