@@ -158,3 +158,15 @@ class Repository:
             )
             for r in rows
         ]
+
+    async def get_credentials_by_prefix(self, prefix: str) -> list[tuple[str, str]]:
+        """Returns (service_type, encrypted) for all credentials with the given prefix."""
+        rows = await self._conn.fetch(
+            """
+            SELECT service_type, encrypted FROM credentials
+            WHERE employee_id = $1 AND service_type LIKE $2
+            """,
+            self._employee_id,
+            f"{prefix}%",
+        )
+        return [(r["service_type"], r["encrypted"]) for r in rows]
