@@ -62,6 +62,7 @@ def main() -> None:
             "-d",
             "postgres",
             "redis",
+            "--remove-orphans",
         ],
         check=True,
     )
