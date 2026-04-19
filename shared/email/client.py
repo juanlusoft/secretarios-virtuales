@@ -38,10 +38,23 @@ class EmailClient:
                 raise ValueError(f"IMAP login failed: {data}")
             await imap.select("INBOX")
             _, data = await imap.search("ALL")
-            uids = data[0].decode().split() if data[0] else []
-            for uid in uids[-limit:]:
-                _, msg_data = await imap.fetch(uid, "(RFC822)")
-                raw = msg_data[0][1] if msg_data else b""
+            # aioimaplib may return ints, bytes or strings depending on version
+            raw_uids = data[0] if data else b""
+            if isinstance(raw_uids, (bytes, bytearray)):
+                uid_list = raw_uids.decode().split()
+            elif isinstance(raw_uids, int):
+                uid_list = [str(raw_uids)] if raw_uids else []
+            else:
+                uid_list = str(raw_uids).split() if raw_uids else []
+            uids = uid_list[-limit:]
+            for uid in uids:
+                _, msg_data = await imap.fetch(str(uid), "(RFC822)")
+                # aioimaplib fetch returns list of lines; find the raw bytes
+                raw = b""
+                for item in (msg_data or []):
+                    if isinstance(item, (bytes, bytearray)) and len(item) > 100:
+                        raw = bytes(item)
+                        break
                 parsed = email_lib.message_from_bytes(raw)
                 body = ""
                 if parsed.is_multipart():
