@@ -14,6 +14,7 @@ from shared.crypto import CredentialStore
 from shared.db.pool import DatabasePool
 from shared.llm.chat import ChatClient
 from shared.llm.embeddings import EmbeddingClient
+from shared.tools import SSHStore, ToolExecutor
 
 load_dotenv()
 logging.basicConfig(
@@ -59,8 +60,26 @@ async def main(employee_id_str: str) -> None:
     store = CredentialStore(fernet_key)
     bot_token = store.decrypt(enc_token)
 
+    raw_conn2 = await asyncpg.connect(app_dsn)
+    async with raw_conn2.transaction():
+        await raw_conn2.execute(
+            "SELECT set_config('app.current_employee_id', $1, true)",
+            str(employee_id),
+        )
+        tools_enc = await raw_conn2.fetchval(
+            "SELECT encrypted FROM credentials WHERE employee_id=$1 AND service_type='tools_enabled'",
+            employee_id,
+        )
+    await raw_conn2.close()
+    tools_enabled = tools_enc is not None and store.decrypt(tools_enc) == "true"
+
     pool = DatabasePool(app_dsn, employee_id)
     await pool.connect()
+
+    executor: ToolExecutor | None = None
+    if tools_enabled:
+        ssh_store = SSHStore(pool=pool, employee_id=employee_id, store=store)
+        executor = ToolExecutor(ssh_store=ssh_store)
 
     agent = SecretaryAgent(
         employee_id=employee_id,
@@ -81,6 +100,7 @@ async def main(employee_id_str: str) -> None:
         documents_dir=Path(os.environ.get("DOCUMENTS_DIR", "./data/documents")),
         fernet_key=fernet_key,
         redis_url=os.environ["REDIS_URL"],
+        executor=executor,
     )
 
     await agent.run(bot_token)
