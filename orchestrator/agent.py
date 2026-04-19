@@ -7,6 +7,7 @@ from telegram import Update
 from telegram.ext import Application, ContextTypes, MessageHandler, filters
 
 from orchestrator.admin import AdminService
+from secretary.handlers.onboarding import build_onboarding_handler
 from orchestrator.parser import (
     CreateSecretaryCommand,
     DestroySecretaryCommand,
@@ -155,6 +156,7 @@ class OrchestratorAgent(SecretaryAgent):
 
     async def run(self, bot_token: str) -> None:
         app = Application.builder().token(bot_token).build()
+        app.add_handler(build_onboarding_handler(self))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_text))
         app.add_handler(MessageHandler(filters.COMMAND, self._handle_text))
         app.add_handler(MessageHandler(filters.VOICE, self._handle_voice))
