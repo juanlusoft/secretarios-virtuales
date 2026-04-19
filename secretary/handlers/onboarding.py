@@ -117,8 +117,8 @@ def build_onboarding_handler(agent) -> ConversationHandler:  # type: ignore[type
         return CALENDAR
 
     async def receive_email_pass(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        await update.message.delete()  # type: ignore[union-attr]
         password = update.message.text.strip()  # type: ignore[union-attr]
+        await update.message.delete()  # type: ignore[union-attr]
         provider = context.user_data["email_provider"]  # type: ignore[index]
         username = context.user_data["email_username"]  # type: ignore[index]
         imap_json = json.dumps({
@@ -173,8 +173,8 @@ def build_onboarding_handler(agent) -> ConversationHandler:  # type: ignore[type
         return EMAIL_CUSTOM_PASS
 
     async def receive_custom_pass(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        await update.message.delete()  # type: ignore[union-attr]
         password = update.message.text.strip()  # type: ignore[union-attr]
+        await update.message.delete()  # type: ignore[union-attr]
         username = context.user_data["email_username"]  # type: ignore[index]
         imap_json = json.dumps({
             "host": context.user_data["imap_host"],  # type: ignore[index]
