@@ -223,6 +223,11 @@ else
     ok "Entorno virtual creado"
 fi
 
+# Corregir permisos de carpetas creadas por Docker como root
+if [[ -d "$SCRIPT_DIR/infrastructure/data" ]]; then
+    sudo chown -R "$(id -u):$(id -g)" "$SCRIPT_DIR/infrastructure/data" 2>/dev/null || true
+fi
+
 info "Instalando dependencias Python..."
 uv pip install --python "$VENV_DIR/bin/python" -e ".[dev]"
 ok "Dependencias instaladas"
