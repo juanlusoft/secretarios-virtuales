@@ -32,6 +32,7 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["shared*", "secretary*", "orchestrator*", "supervisor*", "infrastructure*"]
+exclude = ["infrastructure.data*"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
