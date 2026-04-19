@@ -63,11 +63,6 @@ async def main() -> None:
             api_key=os.environ["VLLM_API_KEY"],
             model=os.environ["CHAT_MODEL"],
         ),
-        vision=ChatClient(
-            base_url=os.environ["VLLM_CHAT_URL"],
-            api_key=os.environ["VLLM_API_KEY"],
-            model=os.environ.get("VISION_MODEL", os.environ["CHAT_MODEL"]),
-        ) if os.environ.get("VISION_MODEL") else None,
         embed=EmbeddingClient(
             base_url=os.environ["VLLM_EMBED_URL"],
             api_key=os.environ["VLLM_API_KEY"],
