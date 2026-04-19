@@ -14,6 +14,7 @@ from telegram.ext import (
 )
 
 from secretary.handlers.audio import handle_audio
+from secretary.handlers.config_email import EmailConfigFlow
 from secretary.handlers.document import handle_document
 from secretary.handlers.email import handle_check_email
 from secretary.handlers.photo import handle_photo
@@ -55,6 +56,8 @@ class SecretaryAgent:
         self._documents_dir = documents_dir
         self._store = CredentialStore(fernet_key)
         self._redis_url = redis_url
+        self._config_email = EmailConfigFlow(employee_id, db_pool, self._store)
+        self._email_configured: bool | None = None  # lazily checked, invalidated on save
 
     async def _is_authorized(self, update: Update) -> bool:
         return str(update.effective_chat.id) == self._allowed_chat_id  # type: ignore[union-attr]
@@ -80,15 +83,38 @@ class SecretaryAgent:
             )
         )
 
+    async def _check_email_configured(self) -> bool:
+        if self._email_configured is None:
+            async with self._pool.acquire() as conn:
+                repo = Repository(conn, self._employee_id)
+                self._email_configured = await repo.get_credential("email_imap") is not None
+        return self._email_configured
+
     async def _handle_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._is_authorized(update):
             return
-        msg = update.message.text or ""  # type: ignore[union-attr]
+        msg = (update.message.text or "").strip()  # type: ignore[union-attr]
+
+        # Active config wizard intercepts all input
+        if self._config_email.active:
+            reply, saved = await self._config_email.handle(msg)
+            if saved:
+                self._email_configured = True
+            await update.message.reply_text(reply, parse_mode="Markdown")  # type: ignore[union-attr]
+            return
+
+        if msg.lower() in ("/config email", "/config_email"):
+            reply = self._config_email.start()
+            await update.message.reply_text(reply, parse_mode="Markdown")  # type: ignore[union-attr]
+            return
 
         if msg.lower().startswith("/email"):
             email_client = await self._get_email_client()
             if not email_client:
-                await update.message.reply_text("❌ Email no configurado.")  # type: ignore[union-attr]
+                await update.message.reply_text(  # type: ignore[union-attr]
+                    "❌ Email no configurado. Usa */config email* para activarlo.",
+                    parse_mode="Markdown",
+                )
                 return
             async with self._pool.acquire() as conn:
                 repo = Repository(conn, self._employee_id)
@@ -102,6 +128,7 @@ class SecretaryAgent:
             await update.message.reply_text(response)  # type: ignore[union-attr]
             return
 
+        email_configured = await self._check_email_configured()
         async with self._pool.acquire() as conn:
             repo = Repository(conn, self._employee_id)
             memory = MemoryManager(repo=repo, embed_client=self._embed)
@@ -110,6 +137,7 @@ class SecretaryAgent:
                 employee_name=self._employee_name,
                 memory=memory,
                 chat=self._chat,
+                email_configured=email_configured,
             )
             await memory.save_turn(msg, response)
         await update.message.reply_text(response)  # type: ignore[union-attr]

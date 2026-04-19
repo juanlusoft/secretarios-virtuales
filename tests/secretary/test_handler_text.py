@@ -40,3 +40,41 @@ async def test_handle_text_includes_name_in_system():
 
     call_kwargs = chat.complete.call_args[1]
     assert "María" in call_kwargs["system"]
+
+
+async def test_system_prompt_shows_email_configured():
+    memory = AsyncMock()
+    memory.build_context = AsyncMock(return_value="")
+    chat = AsyncMock()
+    chat.complete = AsyncMock(return_value="ok")
+
+    await handle_text(
+        message="test",
+        employee_name="Juan",
+        memory=memory,
+        chat=chat,
+        email_configured=True,
+    )
+
+    system = chat.complete.call_args[1]["system"]
+    assert "/email" in system
+    assert "bandeja" in system
+
+
+async def test_system_prompt_shows_email_not_configured():
+    memory = AsyncMock()
+    memory.build_context = AsyncMock(return_value="")
+    chat = AsyncMock()
+    chat.complete = AsyncMock(return_value="ok")
+
+    await handle_text(
+        message="test",
+        employee_name="Juan",
+        memory=memory,
+        chat=chat,
+        email_configured=False,
+    )
+
+    system = chat.complete.call_args[1]["system"]
+    assert "/config email" in system
+    assert "sin configurar" in system

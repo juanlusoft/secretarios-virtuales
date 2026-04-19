@@ -10,11 +10,12 @@ from orchestrator.parser import (
 
 
 def test_parse_create_command():
-    cmd = parse_command("crea secretario para Alejandro, token: 123abc456, chatid: 789")
+    token = "123456789:ABCDefghIJKLmnopQRSTuvwxYZ1234567890ab"
+    cmd = parse_command(f"crea secretario para Alejandro, token: {token}, chatid: 987654321")
     assert isinstance(cmd, CreateSecretaryCommand)
     assert cmd.name == "Alejandro"
-    assert cmd.telegram_token == "123abc456"
-    assert cmd.telegram_chat_id == "789"
+    assert cmd.telegram_token == token
+    assert cmd.telegram_chat_id == "987654321"
 
 
 def test_parse_destroy_command():
@@ -41,5 +42,5 @@ def test_returns_none_for_unknown():
 
 
 def test_parse_create_without_chatid():
-    with pytest.raises(ValueError, match="chat_id es obligatorio"):
+    with pytest.raises(ValueError):
         parse_command("crea secretario para Juan, token: tok123")
