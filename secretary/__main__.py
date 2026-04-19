@@ -40,15 +40,19 @@ async def main(employee_id_str: str) -> None:
     employee_name = row["name"]
     telegram_chat_id = row["telegram_chat_id"]
 
-    admin_dsn = os.environ["DATABASE_URL"]
-    raw_conn = await asyncpg.connect(admin_dsn)
-    enc_token = await raw_conn.fetchval(
-        (
-            "SELECT encrypted FROM credentials "
-            "WHERE employee_id=$1 AND service_type='telegram_token'"
-        ),
-        employee_id,
-    )
+    raw_conn = await asyncpg.connect(app_dsn)
+    async with raw_conn.transaction():
+        await raw_conn.execute(
+            "SELECT set_config('app.current_employee_id', $1, true)",
+            str(employee_id),
+        )
+        enc_token = await raw_conn.fetchval(
+            (
+                "SELECT encrypted FROM credentials "
+                "WHERE employee_id=$1 AND service_type='telegram_token'"
+            ),
+            employee_id,
+        )
     await raw_conn.close()
 
     fernet_key = os.environ["FERNET_KEY"].encode()
