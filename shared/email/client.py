@@ -37,7 +37,7 @@ class EmailClient:
             if status != "OK":
                 raise ValueError(f"IMAP login failed: {data}")
             await imap.select("INBOX")
-            _, data = await imap.search("UNSEEN")
+            _, data = await imap.search("ALL")
             uids = data[0].decode().split() if data[0] else []
             for uid in uids[-limit:]:
                 _, msg_data = await imap.fetch(uid, "(RFC822)")
