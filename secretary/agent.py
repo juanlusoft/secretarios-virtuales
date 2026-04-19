@@ -238,17 +238,20 @@ class SecretaryAgent:
         file = await context.bot.get_file(doc.file_id)
         file_bytes = await file.download_as_bytearray()
 
-        async with self._pool.acquire() as conn:
-            repo = Repository(conn, self._employee_id)
-            response = await handle_document(
-                file_bytes=bytes(file_bytes),
-                filename=doc.file_name or "document",
-                mime_type=doc.mime_type or "application/octet-stream",
-                employee_id=self._employee_id,
-                documents_dir=self._documents_dir,
-                repo=repo,
-                embed=self._embed,
-            )
+        try:
+            async with self._pool.acquire() as conn:
+                repo = Repository(conn, self._employee_id)
+                response = await handle_document(
+                    file_bytes=bytes(file_bytes),
+                    filename=doc.file_name or "document",
+                    mime_type=doc.mime_type or "application/octet-stream",
+                    employee_id=self._employee_id,
+                    documents_dir=self._documents_dir,
+                    repo=repo,
+                    embed=self._embed,
+                )
+        except Exception as exc:
+            response = f"❌ No pude procesar el archivo: {exc}"
         await update.message.reply_text(response)  # type: ignore[union-attr]
 
     async def _handle_photo(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -259,16 +262,19 @@ class SecretaryAgent:
         photo_bytes = await file.download_as_bytearray()
         caption = update.message.caption  # type: ignore[union-attr]
 
-        async with self._pool.acquire() as conn:
-            repo = Repository(conn, self._employee_id)
-            memory = MemoryManager(repo=repo, embed_client=self._embed)
-            response = await handle_photo(
-                photo_bytes=bytes(photo_bytes),
-                caption=caption,
-                employee_name=self._employee_name,
-                chat=self._chat,
-                memory=memory,
-            )
+        try:
+            async with self._pool.acquire() as conn:
+                repo = Repository(conn, self._employee_id)
+                memory = MemoryManager(repo=repo, embed_client=self._embed)
+                response = await handle_photo(
+                    photo_bytes=bytes(photo_bytes),
+                    caption=caption,
+                    employee_name=self._employee_name,
+                    chat=self._chat,
+                    memory=memory,
+                )
+        except Exception as exc:
+            response = f"❌ No pude analizar la imagen: {exc}"
         await update.message.reply_text(response)  # type: ignore[union-attr]
 
     async def _listen_redis(self, app: Application) -> None:  # type: ignore[type-arg]
