@@ -52,6 +52,9 @@ def main() -> None:
         sys.exit(1)
 
     print("[3/5] Levantando PostgreSQL y Redis...")
+    # Eliminar contenedores huérfanos con nombres de hash antes de levantar
+    for name in ("sv-postgres", "sv-redis"):
+        subprocess.run(["docker", "rm", "-f", name], capture_output=True)
     subprocess.run(
         [
             "docker",
