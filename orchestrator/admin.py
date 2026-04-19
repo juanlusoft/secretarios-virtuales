@@ -27,37 +27,35 @@ class AdminService:
 
         conn = await asyncpg.connect(self._dsn)
         try:
-            existing = await conn.fetchval(
-                "SELECT id FROM employees WHERE telegram_chat_id = $1",
-                telegram_chat_id,
-            )
-            if existing is not None:
-                raise ValueError(
-                    f"Ya existe un secretario con chat_id {telegram_chat_id}. "
-                    "Usa 'lista los secretarios' para verlo."
+            async with conn.transaction():
+                existing = await conn.fetchval(
+                    "SELECT id FROM employees WHERE telegram_chat_id = $1",
+                    telegram_chat_id,
                 )
-            employee_id_raw = await conn.fetchval(
-                """
-                INSERT INTO employees (name, telegram_chat_id)
-                VALUES ($1, $2)
-                RETURNING id
-                """,
-                name, telegram_chat_id,
-            )
-            if employee_id_raw is None:
-                raise RuntimeError("Failed to create employee")
-            employee_id = cast(UUID, employee_id_raw)
-            await conn.execute(
-                "SELECT set_config('app.current_employee_id', $1, true)", str(employee_id)
-            )
-            encrypted_token = self._store.encrypt(telegram_token)
-            await conn.execute(
-                """
-                INSERT INTO credentials (employee_id, service_type, encrypted)
-                VALUES ($1, 'telegram_token', $2)
-                """,
-                employee_id, encrypted_token,
-            )
+                if existing is not None:
+                    raise ValueError(
+                        f"Ya existe un secretario con chat_id {telegram_chat_id}. "
+                        "Usa 'lista los secretarios' para verlo."
+                    )
+                employee_id_raw = await conn.fetchval(
+                    """
+                    INSERT INTO employees (name, telegram_chat_id)
+                    VALUES ($1, $2)
+                    RETURNING id
+                    """,
+                    name, telegram_chat_id,
+                )
+                if employee_id_raw is None:
+                    raise RuntimeError("Failed to create employee")
+                employee_id = cast(UUID, employee_id_raw)
+                encrypted_token = self._store.encrypt(telegram_token)
+                await conn.execute(
+                    """
+                    INSERT INTO credentials (employee_id, service_type, encrypted)
+                    VALUES ($1, 'telegram_token', $2)
+                    """,
+                    employee_id, encrypted_token,
+                )
         finally:
             await conn.close()
 
