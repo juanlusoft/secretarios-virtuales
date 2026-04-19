@@ -169,23 +169,45 @@ ok "Ollama activo en localhost:11434"
 # ─── 6/8 · Docker Desktop ────────────────────────────────────────────
 step "6/8 · Docker Desktop (PostgreSQL + Redis)"
 
-if ! command -v docker &>/dev/null; then
-    info "Instalando Docker Desktop via Homebrew..."
-    brew install --cask docker
-    warn "Docker Desktop instalado."
-    warn "Ábrelo una vez para completar la configuración, luego vuelve a ejecutar este script."
-    open -a Docker
-    exit 0
+_install_docker_desktop() {
+    # Homebrew cask llama a sudo para symlinks en /usr/local — puede fallar en Apple Silicon.
+    # Si falla, instalamos el .app directamente desde el cask sin symlinks de sistema.
+    info "Instalando Docker Desktop..."
+    if brew install --cask docker-desktop 2>/dev/null; then
+        return 0
+    fi
+    # Fallback: mover el .app que brew deja en el Caskroom aunque haya fallado el linking
+    DOCKER_APP_SRC=$(find /opt/homebrew/Caskroom/docker-desktop -name "Docker.app" 2>/dev/null | head -1)
+    if [[ -n "$DOCKER_APP_SRC" ]]; then
+        info "Copiando Docker.app a /Applications (sin symlinks de sistema)..."
+        cp -R "$DOCKER_APP_SRC" /Applications/Docker.app
+        # Crear symlink de docker CLI manualmente sin sudo
+        mkdir -p "$HOME/.local/bin"
+        ln -sf /Applications/Docker.app/Contents/Resources/bin/docker "$HOME/.local/bin/docker" 2>/dev/null || true
+        export PATH="$HOME/.local/bin:$PATH"
+        return 0
+    fi
+    return 1
+}
+
+if [[ ! -d /Applications/Docker.app ]] && ! command -v docker &>/dev/null; then
+    _install_docker_desktop || {
+        echo ""
+        warn "No se pudo instalar Docker Desktop automáticamente."
+        warn "Descárgalo desde https://www.docker.com/products/docker-desktop/ e instálalo manualmente."
+        warn "Luego vuelve a ejecutar este script."
+        exit 1
+    }
 fi
 
 if ! docker info &>/dev/null; then
     info "Arrancando Docker Desktop..."
     open -a Docker 2>/dev/null || true
-    for i in {1..20}; do
+    for i in {1..25}; do
         docker info &>/dev/null && break
         sleep 3
-        info "  esperando Docker... (${i}/20)"
-        [[ $i -eq 20 ]] && err "Docker no disponible. Asegúrate de que Docker Desktop está corriendo."
+        info "  esperando Docker Desktop... (${i}/25)"
+        [[ $i -eq 25 ]] && err "Docker no disponible. Asegúrate de que Docker Desktop está corriendo."
     done
 fi
 ok "Docker $(docker version --format '{{.Server.Version}}' 2>/dev/null || echo 'activo')"
@@ -211,7 +233,7 @@ if [[ "$SKIP_CONFIG" == "false" ]]; then
 
     [[ -z "$DB_PASS" ]] && DB_PASS=$($PYTHON_BIN -c "import secrets; print(secrets.token_urlsafe(16))")
     REDIS_PASS=$($PYTHON_BIN -c "import secrets; print(secrets.token_urlsafe(16))")
-    FERNET_KEY=$($PYTHON_BIN -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())")
+    FERNET_KEY=$($PYTHON_BIN -c "import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())")
 
     cat > "$SCRIPT_DIR/.env" << ENV
 # Auto-generado por install-mac.sh — $(date)
