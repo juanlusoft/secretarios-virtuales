@@ -128,6 +128,11 @@ class OrchestratorAgent(SecretaryAgent):
             return
         await super()._handle_text(update, context)
 
+    async def _handle_voice(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not await self._is_authorized(update):
+            return
+        await super()._handle_voice(update, context)
+
     async def run(self, bot_token: str) -> None:  # type: ignore[override]
         app = Application.builder().token(bot_token).build()
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_text))
