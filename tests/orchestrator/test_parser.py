@@ -44,3 +44,18 @@ def test_returns_none_for_unknown():
 def test_parse_create_without_chatid():
     with pytest.raises(ValueError):
         parse_command("crea secretario para Juan, token: tok123")
+
+
+def test_parse_create_with_tools():
+    token = "123456789:ABCDefghIJKLmnopQRSTuvwxYZ1234567890ab"
+    cmd = parse_command(f"crea secretario para Carlos con herramientas, token: {token}, chatid: 111222333")
+    assert isinstance(cmd, CreateSecretaryCommand)
+    assert cmd.name == "Carlos"
+    assert cmd.tools_enabled is True
+
+
+def test_parse_create_without_tools_flag():
+    token = "123456789:ABCDefghIJKLmnopQRSTuvwxYZ1234567890ab"
+    cmd = parse_command(f"crea secretario para Laura, token: {token}, chatid: 444555666")
+    assert isinstance(cmd, CreateSecretaryCommand)
+    assert cmd.tools_enabled is False

@@ -18,6 +18,7 @@ class AdminService:
         name: str,
         telegram_token: str,
         telegram_chat_id: str,
+        tools_enabled: bool = False,
     ) -> UUID:
         if not telegram_chat_id or not telegram_chat_id.strip():
             raise ValueError(
@@ -60,6 +61,15 @@ class AdminService:
                     """,
                     employee_id, encrypted_token,
                 )
+                if tools_enabled:
+                    await conn.execute(
+                        """
+                        INSERT INTO credentials (employee_id, service_type, encrypted)
+                        VALUES ($1, 'tools_enabled', $2)
+                        """,
+                        employee_id,
+                        self._store.encrypt("true"),
+                    )
         finally:
             await conn.close()
 

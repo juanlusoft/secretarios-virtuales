@@ -7,6 +7,7 @@ class CreateSecretaryCommand:
     name: str
     telegram_token: str
     telegram_chat_id: str
+    tools_enabled: bool = False
 
 
 @dataclass
@@ -88,10 +89,12 @@ def parse_command(
                 "Para crear un secretario necesito el token del bot y el chat_id.\n"
                 "Ejemplo: crea un secretario para María, token 123456:ABC... chatid 987654321"
             )
+        tools_enabled = bool(re.search(r"con\s+herramientas", text, re.IGNORECASE))
         return CreateSecretaryCommand(
             name=m.group("name"),
             telegram_token=token,
             telegram_chat_id=chat_id,
+            tools_enabled=tools_enabled,
         )
 
     if m := _DESTROY_PATTERN.search(text):

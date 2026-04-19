@@ -95,12 +95,14 @@ class OrchestratorAgent(SecretaryAgent):
                     name=command.name,
                     telegram_token=command.telegram_token,
                     telegram_chat_id=command.telegram_chat_id,
+                    tools_enabled=command.tools_enabled,
                 )
             except ValueError as exc:
                 await update.message.reply_text(str(exc))  # type: ignore[union-attr]
                 return True
+            tools_note = " (con herramientas)" if command.tools_enabled else ""
             await update.message.reply_text(  # type: ignore[union-attr]
-                f"✅ Secretario {command.name} creado (id: {employee_id}).\n"
+                f"✅ Secretario {command.name} creado{tools_note} (id: {employee_id}).\n"
                 "El supervisor lo arrancará en breve."
             )
             return True
