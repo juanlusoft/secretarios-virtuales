@@ -21,12 +21,12 @@
   },
   "rtx3080_12gb": {
     "min_vram_gb": 12,
-    "chat_model": "Qwen/Qwen2.5-7B-Instruct",
+    "chat_model": "Qwen/Qwen2.5-7B-Instruct-AWQ",
     "embedding_model": "BAAI/bge-m3",
     "embedding_dim": 1024,
     "whisper_model": "base",
-    "gpu_memory_chat": 0.70,
-    "gpu_memory_embed": 0.10,
+    "gpu_memory_chat": 0.75,
+    "gpu_memory_embed": 0.08,
     "max_users": 5
   },
   "rtx3080ti_8gb": {
