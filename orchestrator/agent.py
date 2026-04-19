@@ -90,14 +90,18 @@ class OrchestratorAgent(SecretaryAgent):
             return True
 
         if isinstance(command, CreateSecretaryCommand):
-            employee_id = await self._admin.create_secretary(
-                name=command.name,
-                telegram_token=command.telegram_token,
-                telegram_chat_id=command.telegram_chat_id,
-            )
+            try:
+                employee_id = await self._admin.create_secretary(
+                    name=command.name,
+                    telegram_token=command.telegram_token,
+                    telegram_chat_id=command.telegram_chat_id,
+                )
+            except ValueError as exc:
+                await update.message.reply_text(str(exc))  # type: ignore[union-attr]
+                return True
             await update.message.reply_text(  # type: ignore[union-attr]
-                f"Secretario {command.name} creado (id: {employee_id}).\n"
-                "El supervisor lo arrancara en breve."
+                f"✅ Secretario {command.name} creado (id: {employee_id}).\n"
+                "El supervisor lo arrancará en breve."
             )
             return True
 

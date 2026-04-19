@@ -27,6 +27,15 @@ class AdminService:
 
         conn = await asyncpg.connect(self._dsn)
         try:
+            existing = await conn.fetchval(
+                "SELECT id FROM employees WHERE telegram_chat_id = $1",
+                telegram_chat_id,
+            )
+            if existing is not None:
+                raise ValueError(
+                    f"Ya existe un secretario con chat_id {telegram_chat_id}. "
+                    "Usa 'lista los secretarios' para verlo."
+                )
             employee_id_raw = await conn.fetchval(
                 """
                 INSERT INTO employees (name, telegram_chat_id)
