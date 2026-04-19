@@ -11,6 +11,7 @@ async def handle_audio(
     whisper: WhisperClient,
     memory: MemoryManager,
     chat: ChatClient,
+    profile: dict | None = None,
 ) -> tuple[str, str]:
     transcription = await whisper.transcribe(audio_bytes, filename=filename)
     response = await handle_text(
@@ -18,5 +19,6 @@ async def handle_audio(
         employee_name=employee_name,
         memory=memory,
         chat=chat,
+        profile=profile,
     )
     return transcription, response

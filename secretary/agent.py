@@ -13,8 +13,10 @@ from telegram.ext import (
 )
 
 from secretary.handlers.audio import handle_audio
+from secretary.handlers.config_email import build_config_email_handler
 from secretary.handlers.document import handle_document
 from secretary.handlers.email import handle_check_email
+from secretary.handlers.onboarding import build_onboarding_handler
 from secretary.handlers.photo import handle_photo
 from secretary.handlers.text import handle_text
 from secretary.memory import MemoryManager
@@ -129,6 +131,7 @@ class SecretaryAgent:
                 employee_name=self._employee_name,
                 memory=memory,
                 chat=self._chat,
+                profile=self._profile,
             )
             await memory.save_turn(msg, response)
         await update.message.reply_text(response)  # type: ignore[union-attr]
@@ -150,6 +153,7 @@ class SecretaryAgent:
                 whisper=self._whisper,
                 memory=memory,
                 chat=self._chat,
+                profile=self._profile,
             )
             await memory.save_turn(transcription, response)
 
@@ -213,7 +217,12 @@ class SecretaryAgent:
                 )
 
     async def run(self, bot_token: str) -> None:
+        self._profile = await self._load_profile()
+
         app = Application.builder().token(bot_token).build()
+
+        app.add_handler(build_onboarding_handler(self))
+        app.add_handler(build_config_email_handler(self))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_text))
         app.add_handler(MessageHandler(filters.COMMAND, self._handle_text))
         app.add_handler(MessageHandler(filters.VOICE, self._handle_voice))
