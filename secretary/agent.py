@@ -30,6 +30,10 @@ from shared.email.client import EmailClient
 from shared.email.models import EmailConfig
 from shared.llm.chat import ChatClient
 from shared.llm.embeddings import EmbeddingClient
+from datetime import datetime, timedelta
+
+from shared.llm.chat import ToolCall
+from shared.tools import TOOL_DEFINITIONS, ToolExecutor, is_destructive
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +52,7 @@ class SecretaryAgent:
         fernet_key: bytes,
         redis_url: str,
         vision: ChatClient | None = None,
+        executor: ToolExecutor | None = None,
     ) -> None:
         self._employee_id = employee_id
         self._employee_name = employee_name
@@ -66,6 +71,13 @@ class SecretaryAgent:
         self._config_email = EmailConfigFlow(employee_id, db_pool, self._store)
         self._email_configured: bool | None = None  # lazily checked, invalidated on save
         self._profile: dict | None = None  # lazily loaded from credentials table
+        self._executor = executor
+        self._superuser_until: datetime | None = None
+        self._pending_tool: ToolCall | None = None
+        self._pending_messages: list[dict] | None = None
+        self._pending_used_tools: list[str] | None = None
+        self._pending_system: str | None = None
+        self._pending_original_msg: str = ""
 
     async def _is_authorized(self, update: Update) -> bool:
         return str(update.effective_chat.id) in self._allowed_chat_ids  # type: ignore[union-attr]
@@ -89,6 +101,69 @@ class SecretaryAgent:
                 password=imap["password"],
             )
         )
+
+    def _is_superuser(self) -> bool:
+        if self._superuser_until is None:
+            return False
+        return datetime.now() < self._superuser_until
+
+    def _reset_superuser_timer(self) -> None:
+        if self._superuser_until is not None:
+            self._superuser_until = datetime.now() + timedelta(minutes=30)
+
+    async def _run_tool_loop(
+        self,
+        messages: list[dict],
+        system: str,
+        used_tools: list[str],
+    ) -> str:
+        for _ in range(10):
+            text, tool_calls = await self._chat.complete_with_tools(
+                messages, system, TOOL_DEFINITIONS
+            )
+            if not tool_calls:
+                suffix = (
+                    f"\n\n_Herramientas usadas: {', '.join(used_tools)}_"
+                    if used_tools
+                    else ""
+                )
+                return (text or "") + suffix
+
+            messages.append({
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [
+                    {
+                        "id": tc.id,
+                        "type": "function",
+                        "function": {
+                            "name": tc.name,
+                            "arguments": json.dumps(tc.args),
+                        },
+                    }
+                    for tc in tool_calls
+                ],
+            })
+
+            for tc in tool_calls:
+                if is_destructive(tc.name, tc.args) and not self._is_superuser():
+                    self._pending_tool = tc
+                    self._pending_messages = messages
+                    self._pending_used_tools = used_tools
+                    self._pending_system = system
+                    cmd_str = tc.args.get("command", json.dumps(tc.args))
+                    return f"⚠️ Voy a ejecutar:\n`{cmd_str}`\n¿Confirmas? (sí/no)"
+
+                result = await self._executor.run(tc.name, tc.args)  # type: ignore[union-attr]
+                used_tools.append(tc.name)
+                self._reset_superuser_timer()
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": result,
+                })
+
+        return "⚠️ Límite de 10 iteraciones alcanzado."
 
     async def _check_email_configured(self) -> bool:
         if self._email_configured is None:
@@ -134,6 +209,51 @@ class SecretaryAgent:
             if saved:
                 self._email_configured = True
             await update.message.reply_text(reply, parse_mode="Markdown")  # type: ignore[union-attr]
+            return
+
+        # Superuser activation
+        if msg == "/superuser":
+            self._superuser_until = datetime.now() + timedelta(minutes=30)
+            await update.message.reply_text(  # type: ignore[union-attr]
+                "🔓 Modo superusuario activo durante 30 minutos de inactividad.\n"
+                "Los comandos destructivos se ejecutarán sin confirmación."
+            )
+            return
+
+        # Pending destructive confirmation
+        if self._pending_tool is not None:
+            tc = self._pending_tool
+            if msg.lower().strip() in ("sí", "si", "s", "yes", "y"):
+                self._pending_tool = None
+                result = await self._executor.run(tc.name, tc.args)  # type: ignore[union-attr]
+                self._pending_used_tools.append(tc.name)  # type: ignore[union-attr]
+                self._reset_superuser_timer()
+                self._pending_messages.append({  # type: ignore[union-attr]
+                    "role": "tool",
+                    "tool_call_id": tc.id,
+                    "content": result,
+                })
+                messages = self._pending_messages
+                system = self._pending_system
+                used_tools = self._pending_used_tools
+                original_msg = self._pending_original_msg
+                self._pending_messages = None
+                self._pending_system = None
+                self._pending_used_tools = None
+                self._pending_original_msg = ""
+                response = await self._run_tool_loop(messages, system, used_tools)  # type: ignore[arg-type]
+                async with self._pool.acquire() as conn:
+                    repo = Repository(conn, self._employee_id)
+                    memory = MemoryManager(repo=repo, embed_client=self._embed)
+                    await memory.save_turn(original_msg, response)
+                await update.message.reply_text(response, parse_mode="Markdown")  # type: ignore[union-attr]
+            else:
+                self._pending_tool = None
+                self._pending_messages = None
+                self._pending_system = None
+                self._pending_used_tools = None
+                self._pending_original_msg = ""
+                await update.message.reply_text("❌ Comando cancelado.")  # type: ignore[union-attr]
             return
 
         if msg.lower() in ("/ayuda", "/help", "/start help"):
@@ -194,6 +314,22 @@ class SecretaryAgent:
         email_configured = await self._check_email_configured()
         if self._profile is None:
             self._profile = await self._load_profile()
+
+        if self._executor is not None:
+            system = _build_tool_system(self._employee_name, self._profile)
+            self._pending_original_msg = msg
+            response = await self._run_tool_loop(
+                messages=[{"role": "user", "content": msg}],
+                system=system,
+                used_tools=[],
+            )
+            async with self._pool.acquire() as conn:
+                repo = Repository(conn, self._employee_id)
+                memory = MemoryManager(repo=repo, embed_client=self._embed)
+                await memory.save_turn(msg, response)
+            await update.message.reply_text(response, parse_mode="Markdown")  # type: ignore[union-attr]
+            return
+
         async with self._pool.acquire() as conn:
             repo = Repository(conn, self._employee_id)
             memory = MemoryManager(repo=repo, embed_client=self._embed)
@@ -381,3 +517,17 @@ class SecretaryAgent:
                     await redis_task
                 with suppress(asyncio.CancelledError):
                     await email_task
+
+
+def _build_tool_system(employee_name: str, profile: dict | None) -> str:
+    bot_name = (profile or {}).get("bot_name") or employee_name
+    preferred_name = (profile or {}).get("preferred_name") or employee_name
+    language = (profile or {}).get("language") or "español"
+    tool_names = ", ".join(t["function"]["name"] for t in TOOL_DEFINITIONS)
+    return (
+        f"Eres {bot_name}, asistente técnico personal de {preferred_name}. "
+        f"Responde en {language}. "
+        f"Tienes acceso a herramientas de sistema: {tool_names}. "
+        "Úsalas para completar las tareas. Ejecuta en silencio y da un resumen al final. "
+        "NUNCA uses chino ni muestres razonamiento interno."
+    )
