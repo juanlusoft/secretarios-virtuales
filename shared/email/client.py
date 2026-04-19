@@ -28,9 +28,11 @@ class EmailClient:
 
     async def fetch_inbox(self, limit: int = 10) -> list[EmailMessage]:
         messages: list[EmailMessage] = []
-        async with aioimaplib.IMAP4_SSL(
+        imap = aioimaplib.IMAP4_SSL(
             host=self._config.imap_host, port=self._config.imap_port
-        ) as imap:
+        )
+        await imap.wait_hello_from_server()
+        try:
             await imap.login(self._config.username, self._config.password)
             await imap.select("INBOX")
             _, data = await imap.search("UNSEEN")
@@ -61,4 +63,6 @@ class EmailClient:
                         date=parsed.get("Date", ""),
                     )
                 )
+        finally:
+            await imap.logout()
         return messages
