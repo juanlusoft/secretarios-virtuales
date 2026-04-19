@@ -46,10 +46,11 @@ _DESTROY_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-# Matches: "avisa/dile/manda a X que ..." or "mensaje para X: ..."
+# Matches: "avisa/dile/manda (un mensaje) a X que ..." or "mensaje para X: ..."
 _SEND_PATTERN = re.compile(
-    r"(?:avisa|d[ií]le|manda(?:le)?|mensaje\s+para)\s+(?:a\s+)?(?P<name>\w+)[^\w]*"
-    r"(?:que\s+)?(?P<message>.+)",
+    r"(?:avisa|d[ií]le|manda(?:le)?|mensaje\s+para)"
+    r"(?:\s+(?:un[ao]?|el|la)\s+(?:mensaje\s*)?)?"
+    r"\s*a\s+(?P<name>\w+)[^\w]*(?:que\s+)?(?P<message>.+)",
     re.IGNORECASE,
 )
 
