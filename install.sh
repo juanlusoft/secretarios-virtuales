@@ -274,7 +274,7 @@ Group=${CURRENT_USER}
 WorkingDirectory=${SCRIPT_DIR}
 Environment="PATH=${VENV_DIR}/bin:/usr/local/bin:/usr/bin:/bin"
 EnvironmentFile=${SCRIPT_DIR}/.env
-ExecStartPre=/bin/bash -c '${DOCKER_CMD} compose -f ${SCRIPT_DIR}/infrastructure/docker-compose.yml --profile gpu up -d --remove-orphans'
+ExecStartPre=/bin/bash -c '${DOCKER_CMD} compose --env-file ${SCRIPT_DIR}/.env -f ${SCRIPT_DIR}/infrastructure/docker-compose.yml --profile gpu up -d --remove-orphans'
 ExecStart=${VENV_DIR}/bin/python -m supervisor
 Restart=always
 RestartSec=10
@@ -297,11 +297,11 @@ if [[ -f "$SCRIPT_DIR/.env" ]]; then
     $DOCKER_CMD container prune -f &>/dev/null || true
 
     info "Arrancando servicios Docker (postgres, redis)..."
-    $DOCKER_CMD compose -f "$SCRIPT_DIR/infrastructure/docker-compose.yml" up -d postgres redis --remove-orphans
+    $DOCKER_CMD compose --env-file "$SCRIPT_DIR/.env" -f "$SCRIPT_DIR/infrastructure/docker-compose.yml" up -d postgres redis --remove-orphans
 
     if $GPU_AVAILABLE; then
         info "Arrancando modelos de IA (vLLM + Whisper) en Docker..."
-        $DOCKER_CMD compose -f "$SCRIPT_DIR/infrastructure/docker-compose.yml" --profile gpu up -d --remove-orphans
+        $DOCKER_CMD compose --env-file "$SCRIPT_DIR/.env" -f "$SCRIPT_DIR/infrastructure/docker-compose.yml" --profile gpu up -d --remove-orphans
         info "Los modelos pueden tardar 5-15 minutos en cargar la primera vez."
         info "Progreso: docker logs sv-vllm-chat -f"
     else
