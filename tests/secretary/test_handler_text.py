@@ -76,5 +76,5 @@ async def test_system_prompt_shows_email_not_configured():
     )
 
     system = chat.complete.call_args[1]["system"]
-    assert "/config email" in system
+    assert "/config_email" in system
     assert "sin configurar" in system

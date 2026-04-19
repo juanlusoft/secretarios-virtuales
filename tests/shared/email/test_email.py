@@ -38,15 +38,18 @@ async def test_fetch_inbox_returns_messages(config):
     mock_imap = AsyncMock()
     mock_imap.__aenter__ = AsyncMock(return_value=mock_imap)
     mock_imap.__aexit__ = AsyncMock(return_value=False)
-    mock_imap.login = AsyncMock()
-    mock_imap.select = AsyncMock(return_value=(b"OK", [b"5"]))
-    mock_imap.search = AsyncMock(return_value=(b"OK", [b"1 2"]))
+    mock_imap.wait_hello_from_server = AsyncMock()
+    mock_imap.login = AsyncMock(return_value=("OK", [b"LOGIN completed"]))
+    mock_imap.select = AsyncMock(return_value=("OK", [b"5"]))
+    mock_imap.search = AsyncMock(return_value=("OK", [b"1 2"]))
+    _raw_email = b"From: a@b.com\r\nSubject: Asunto\r\n\r\n" + b"Cuerpo " * 20
     mock_imap.fetch = AsyncMock(
         return_value=(
-            b"OK",
-            [(b"1 (RFC822 {500}", b"From: a@b.com\r\nSubject: Asunto\r\n\r\nCuerpo")]
+            "OK",
+            [b"1 (RFC822 {500}", _raw_email]
         )
     )
+    mock_imap.logout = AsyncMock()
 
     with patch("aioimaplib.IMAP4_SSL", return_value=mock_imap):
         messages = await client.fetch_inbox(limit=5)

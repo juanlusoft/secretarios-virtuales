@@ -31,13 +31,13 @@ def _mock_pool_conn(pool: MagicMock) -> AsyncMock:
 async def _complete_flow(flow: EmailConfigFlow) -> tuple[str, bool]:
     """Run through all steps with valid data."""
     flow.start()
-    await flow.handle("imap.example.com")
-    await flow.handle("993")
-    await flow.handle("smtp.example.com")
-    await flow.handle("587")
-    await flow.handle("user@example.com")
-    await flow.handle("s3cr3t")
-    return await flow.handle("sí")
+    await flow.handle("user@example.com")   # EMAIL step → custom domain → IMAP_HOST
+    await flow.handle("imap.example.com")   # IMAP_HOST
+    await flow.handle("993")                # IMAP_PORT
+    await flow.handle("smtp.example.com")   # SMTP_HOST
+    await flow.handle("587")                # SMTP_PORT
+    await flow.handle("s3cr3t")             # CUSTOM_PASS
+    return await flow.handle("sí")          # CONFIRM
 
 
 async def test_flow_not_active_initially():
@@ -64,7 +64,8 @@ async def test_cancel_mid_flow():
 async def test_invalid_port_retries():
     flow, _ = _make_flow()
     flow.start()
-    await flow.handle("imap.example.com")
+    await flow.handle("user@example.com")   # EMAIL step → custom domain → IMAP_HOST
+    await flow.handle("imap.example.com")   # IMAP_HOST → IMAP_PORT
     reply, saved = await flow.handle("no-es-un-puerto")
     assert not saved
     assert flow.active
@@ -90,13 +91,13 @@ async def test_full_flow_saves_credentials():
 async def test_confirm_no_cancels():
     flow, _ = _make_flow()
     flow.start()
-    await flow.handle("imap.example.com")
-    await flow.handle("")          # default port
-    await flow.handle("smtp.example.com")
-    await flow.handle("")          # default port
-    await flow.handle("user@example.com")
-    await flow.handle("pass")
-    reply, saved = await flow.handle("no")
+    await flow.handle("user@example.com")   # EMAIL step → custom domain → IMAP_HOST
+    await flow.handle("imap.example.com")   # IMAP_HOST
+    await flow.handle("")                   # IMAP_PORT default (993)
+    await flow.handle("smtp.example.com")   # SMTP_HOST
+    await flow.handle("")                   # SMTP_PORT default (587)
+    await flow.handle("pass")               # CUSTOM_PASS
+    reply, saved = await flow.handle("no")  # CONFIRM → cancel
     assert not saved
     assert not flow.active
 
@@ -106,12 +107,12 @@ async def test_default_ports():
     _mock_pool_conn(pool)
 
     flow.start()
-    await flow.handle("imap.example.com")
-    await flow.handle("")   # should default to 993
-    await flow.handle("smtp.example.com")
-    await flow.handle("")   # should default to 587
-    await flow.handle("user@example.com")
-    await flow.handle("pass")
+    await flow.handle("user@example.com")   # EMAIL step → custom domain → IMAP_HOST
+    await flow.handle("imap.example.com")   # IMAP_HOST
+    await flow.handle("")                   # IMAP_PORT default (993)
+    await flow.handle("smtp.example.com")   # SMTP_HOST
+    await flow.handle("")                   # SMTP_PORT default (587)
+    await flow.handle("pass")               # CUSTOM_PASS
 
     with patch("secretary.handlers.config_email.Repository") as MockRepo:
         repo_instance = AsyncMock()
