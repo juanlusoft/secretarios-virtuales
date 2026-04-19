@@ -8,9 +8,11 @@ from dotenv import load_dotenv
 
 from orchestrator.agent import OrchestratorAgent
 from shared.audio.whisper import WhisperClient
+from shared.crypto import CredentialStore
 from shared.db.pool import DatabasePool
 from shared.llm.chat import ChatClient
 from shared.llm.embeddings import EmbeddingClient
+from shared.tools import SSHStore, ToolExecutor
 
 load_dotenv()
 logging.basicConfig(
@@ -53,6 +55,10 @@ async def main() -> None:
     pool = DatabasePool(dsn, employee_id)
     await pool.connect()
 
+    store = CredentialStore(fernet_key)
+    ssh_store = SSHStore(pool=pool, employee_id=employee_id, store=store)
+    executor = ToolExecutor(ssh_store=ssh_store)
+
     agent = OrchestratorAgent(
         employee_id=employee_id,
         employee_name=employee_name,
@@ -73,6 +79,7 @@ async def main() -> None:
         fernet_key=fernet_key,
         redis_url=os.environ["REDIS_URL"],
         dsn=dsn,
+        executor=executor,
     )
 
     await agent.run(bot_token)

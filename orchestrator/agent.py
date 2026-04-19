@@ -20,6 +20,7 @@ from shared.audio.whisper import WhisperClient
 from shared.db.pool import DatabasePool
 from shared.llm.chat import ChatClient
 from shared.llm.embeddings import EmbeddingClient
+from shared.tools import SSHStore, ToolExecutor
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,7 @@ class OrchestratorAgent(SecretaryAgent):
         fernet_key: bytes,
         redis_url: str,
         dsn: str,
+        executor: ToolExecutor | None = None,
     ) -> None:
         super().__init__(
             employee_id=employee_id,
@@ -50,6 +52,7 @@ class OrchestratorAgent(SecretaryAgent):
             documents_dir=documents_dir,
             fernet_key=fernet_key,
             redis_url=redis_url,
+            executor=executor,
         )
         self._admin = AdminService(
             dsn=dsn,
