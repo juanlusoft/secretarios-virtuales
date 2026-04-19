@@ -33,7 +33,9 @@ class EmailClient:
         )
         await imap.wait_hello_from_server()
         try:
-            await imap.login(self._config.username, self._config.password)
+            status, data = await imap.login(self._config.username, self._config.password)
+            if status != "OK":
+                raise ValueError(f"IMAP login failed: {data}")
             await imap.select("INBOX")
             _, data = await imap.search("UNSEEN")
             uids = data[0].decode().split() if data[0] else []
