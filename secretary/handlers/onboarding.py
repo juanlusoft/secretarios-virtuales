@@ -38,7 +38,7 @@ def build_onboarding_handler(agent) -> ConversationHandler:  # type: ignore[type
     async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         if not await agent._is_authorized(update):
             return ConversationHandler.END
-        profile = await agent._load_profile()
+        profile = agent._profile or await agent._load_profile()
         if profile:
             bot_name = profile.get("bot_name", "tu secretario")
             preferred_name = profile.get("preferred_name", agent._employee_name)
@@ -117,6 +117,7 @@ def build_onboarding_handler(agent) -> ConversationHandler:  # type: ignore[type
         return CALENDAR
 
     async def receive_email_pass(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        await update.message.delete()  # type: ignore[union-attr]
         password = update.message.text.strip()  # type: ignore[union-attr]
         provider = context.user_data["email_provider"]  # type: ignore[index]
         username = context.user_data["email_username"]  # type: ignore[index]
@@ -144,7 +145,11 @@ def build_onboarding_handler(agent) -> ConversationHandler:  # type: ignore[type
         return EMAIL_CUSTOM_IMAP_PORT
 
     async def receive_custom_imap_port(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        context.user_data["imap_port"] = update.message.text.strip()  # type: ignore[union-attr, index]
+        raw = update.message.text.strip()  # type: ignore[union-attr]
+        if not raw.isdigit():
+            await update.message.reply_text("Por favor, ingresa un número de puerto válido (ej: 993):")  # type: ignore[union-attr]
+            return EMAIL_CUSTOM_IMAP_PORT
+        context.user_data["imap_port"] = raw  # type: ignore[index]
         await update.message.reply_text("Servidor SMTP (ej: smtp.tuempresa.com):")  # type: ignore[union-attr]
         return EMAIL_CUSTOM_SMTP_HOST
 
@@ -154,7 +159,11 @@ def build_onboarding_handler(agent) -> ConversationHandler:  # type: ignore[type
         return EMAIL_CUSTOM_SMTP_PORT
 
     async def receive_custom_smtp_port(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        context.user_data["smtp_port"] = update.message.text.strip()  # type: ignore[union-attr, index]
+        raw = update.message.text.strip()  # type: ignore[union-attr]
+        if not raw.isdigit():
+            await update.message.reply_text("Por favor, ingresa un número de puerto válido (ej: 587):")  # type: ignore[union-attr]
+            return EMAIL_CUSTOM_SMTP_PORT
+        context.user_data["smtp_port"] = raw  # type: ignore[index]
         await update.message.reply_text("Usuario del correo (normalmente tu dirección completa):")  # type: ignore[union-attr]
         return EMAIL_CUSTOM_USER
 
@@ -164,6 +173,7 @@ def build_onboarding_handler(agent) -> ConversationHandler:  # type: ignore[type
         return EMAIL_CUSTOM_PASS
 
     async def receive_custom_pass(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        await update.message.delete()  # type: ignore[union-attr]
         password = update.message.text.strip()  # type: ignore[union-attr]
         username = context.user_data["email_username"]  # type: ignore[index]
         imap_json = json.dumps({
@@ -203,9 +213,16 @@ def build_onboarding_handler(agent) -> ConversationHandler:  # type: ignore[type
             "language": context.user_data["language"],  # type: ignore[index]
             "has_email": context.user_data.get("has_email", False),  # type: ignore[union-attr]
             "has_calendar": context.user_data.get("has_calendar", False),  # type: ignore[union-attr]
+            "calendar_type": context.user_data.get("calendar_type", ""),  # type: ignore[union-attr]
         }
-        await agent._save_profile(profile)
-        agent._profile = profile
+        try:
+            await agent._save_profile(profile)
+            agent._profile = profile
+        except Exception:
+            await update.message.reply_text(  # type: ignore[union-attr]
+                "Error al guardar la configuración. Por favor, intenta /start de nuevo."
+            )
+            return ConversationHandler.END
 
         capabilities = [
             "📄 Documentos y PDFs",
