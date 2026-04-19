@@ -131,6 +131,28 @@ class SecretaryAgent:
             await update.message.reply_text(reply, parse_mode="Markdown")  # type: ignore[union-attr]
             return
 
+        if msg.lower() in ("/ayuda", "/help", "/start help"):
+            email_configured = await self._check_email_configured()
+            email_line = "✅ `/email` — revisar bandeja de entrada" if email_configured else "⚙️ `/config_email` — conectar cuenta de email"
+            text = (
+                "🤖 *¿Qué puedo hacer por ti?*\n\n"
+                "💬 *Conversación*\n"
+                "  Escríbeme lo que necesites en lenguaje natural\n\n"
+                "📧 *Email*\n"
+                f"  {email_line}\n\n"
+                "📄 *Documentos*\n"
+                "  Adjunta un PDF o archivo de texto y pregúntame sobre su contenido\n\n"
+                "🎙 *Voz*\n"
+                "  Mándame un audio y te respondo\n\n"
+                "🖼 *Imágenes*\n"
+                "  Mándame una foto y te digo qué contiene\n\n"
+                "⚙️ *Configuración*\n"
+                "  `/config_email` — configurar o cambiar cuenta de email\n"
+                "  `/start` — ver estado del perfil"
+            )
+            await update.message.reply_text(text, parse_mode="Markdown")  # type: ignore[union-attr]
+            return
+
         if msg.lower() in ("/config email", "/config_email"):
             reply = self._config_email.start()
             await update.message.reply_text(reply, parse_mode="Markdown")  # type: ignore[union-attr]
