@@ -21,7 +21,7 @@
   },
   "rtx3080_12gb": {
     "min_vram_gb": 12,
-    "chat_model": "Qwen/Qwen2.5-7B-Instruct-AWQ",
+    "chat_model": "Qwen/Qwen2.5-VL-7B-Instruct-AWQ",
     "embedding_model": "BAAI/bge-m3",
     "embedding_dim": 1024,
     "whisper_model": "base",
