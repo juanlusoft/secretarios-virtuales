@@ -21,9 +21,15 @@ logging.basicConfig(
 
 async def main() -> None:
     bot_token = os.environ["ORCHESTRATOR_BOT_TOKEN"]
-    chat_id = os.environ["ORCHESTRATOR_CHAT_ID"]
+    _raw_ids = os.environ["ORCHESTRATOR_CHAT_ID"]
+    _extra = os.environ.get("ORCHESTRATOR_EXTRA_CHAT_IDS", "")
+    if _extra:
+        _raw_ids = f"{_raw_ids},{_extra}"
+    chat_id = _raw_ids  # may be comma-separated; first ID used as primary for DB
     dsn = os.environ.get("APP_DB_URL", os.environ["DATABASE_URL"])
     fernet_key = os.environ["FERNET_KEY"].encode()
+
+    primary_chat_id = chat_id.split(",")[0].strip()
 
     conn = await asyncpg.connect(dsn)
     row = await conn.fetchrow(
@@ -36,7 +42,7 @@ async def main() -> None:
             VALUES ('Orquestador', $1, true)
             RETURNING id
             """,
-            chat_id,
+            primary_chat_id,
         )
         employee_name = "Orquestador"
     else:
@@ -57,6 +63,11 @@ async def main() -> None:
             api_key=os.environ["VLLM_API_KEY"],
             model=os.environ["CHAT_MODEL"],
         ),
+        vision=ChatClient(
+            base_url=os.environ["VLLM_CHAT_URL"],
+            api_key=os.environ["VLLM_API_KEY"],
+            model=os.environ.get("VISION_MODEL", os.environ["CHAT_MODEL"]),
+        ) if os.environ.get("VISION_MODEL") else None,
         embed=EmbeddingClient(
             base_url=os.environ["VLLM_EMBED_URL"],
             api_key=os.environ["VLLM_API_KEY"],

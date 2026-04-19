@@ -47,12 +47,17 @@ class SecretaryAgent:
         documents_dir: Path,
         fernet_key: bytes,
         redis_url: str,
+        vision: ChatClient | None = None,
     ) -> None:
         self._employee_id = employee_id
         self._employee_name = employee_name
         self._allowed_chat_id = str(allowed_chat_id)
+        self._allowed_chat_ids: frozenset[str] = frozenset(
+            cid.strip() for cid in str(allowed_chat_id).split(",") if cid.strip()
+        )
         self._pool = db_pool
         self._chat = chat
+        self._vision = vision or chat  # fallback al modelo de texto si no hay visión
         self._embed = embed
         self._whisper = whisper
         self._documents_dir = documents_dir
@@ -63,7 +68,7 @@ class SecretaryAgent:
         self._profile: dict | None = None  # lazily loaded from credentials table
 
     async def _is_authorized(self, update: Update) -> bool:
-        return str(update.effective_chat.id) == self._allowed_chat_id  # type: ignore[union-attr]
+        return str(update.effective_chat.id) in self._allowed_chat_ids  # type: ignore[union-attr]
 
     async def _get_email_client(self) -> EmailClient | None:
         async with self._pool.acquire() as conn:
@@ -270,7 +275,7 @@ class SecretaryAgent:
                     photo_bytes=bytes(photo_bytes),
                     caption=caption,
                     employee_name=self._employee_name,
-                    chat=self._chat,
+                    chat=self._vision,
                     memory=memory,
                 )
         except Exception as exc:
