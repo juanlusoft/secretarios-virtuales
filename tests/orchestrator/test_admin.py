@@ -1,8 +1,9 @@
-import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
-from orchestrator.admin import AdminService
 
+import pytest
+
+from orchestrator.admin import AdminService
 
 pytestmark = pytest.mark.asyncio
 

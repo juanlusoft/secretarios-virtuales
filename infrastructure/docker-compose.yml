@@ -1,6 +1,6 @@
 services:
   vllm-chat:
-    image: nvcr.io/nvidia/vllm:25.11-py3
+    image: vllm/vllm-openai:latest
     container_name: sv-vllm-chat
     restart: unless-stopped
     environment:
@@ -18,8 +18,6 @@ services:
               count: all
               capabilities: [gpu]
     command:
-      - vllm
-      - serve
       - "${CHAT_MODEL}"
       - --gpu-memory-utilization
       - "${GPU_MEMORY_CHAT:-0.70}"
@@ -38,7 +36,7 @@ services:
       retries: 5
 
   vllm-embedding:
-    image: nvcr.io/nvidia/vllm:25.11-py3
+    image: vllm/vllm-openai:latest
     container_name: sv-vllm-embedding
     restart: unless-stopped
     environment:
@@ -56,11 +54,7 @@ services:
               count: all
               capabilities: [gpu]
     command:
-      - vllm
-      - serve
       - "${EMBEDDING_MODEL}"
-      - --task
-      - embed
       - --gpu-memory-utilization
       - "${GPU_MEMORY_EMBED:-0.10}"
       - --max-model-len
@@ -116,7 +110,7 @@ services:
     networks:
       - sv-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-svuser}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-svuser} -d ${POSTGRES_DB:-secretarios}"]
       interval: 10s
       timeout: 5s
       retries: 5

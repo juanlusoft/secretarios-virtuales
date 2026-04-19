@@ -1,5 +1,7 @@
-import pytest
 from unittest.mock import AsyncMock
+
+import pytest
+
 from secretary.handlers.text import handle_text
 
 pytestmark = pytest.mark.asyncio
@@ -40,74 +42,39 @@ async def test_handle_text_includes_name_in_system():
     assert "María" in call_kwargs["system"]
 
 
-async def test_handle_text_uses_profile_bot_name():
+async def test_system_prompt_shows_email_configured():
     memory = AsyncMock()
     memory.build_context = AsyncMock(return_value="")
     chat = AsyncMock()
     chat.complete = AsyncMock(return_value="ok")
-
-    profile = {
-        "bot_name": "Clara",
-        "gender": "feminine",
-        "preferred_name": "Francis",
-        "language": "español",
-        "has_email": False,
-        "has_calendar": False,
-    }
 
     await handle_text(
         message="test",
-        employee_name="Francis",
+        employee_name="Juan",
         memory=memory,
         chat=chat,
-        profile=profile,
+        email_configured=True,
     )
 
-    call_kwargs = chat.complete.call_args[1]
-    assert "Clara" in call_kwargs["system"]
-    assert "Francis" in call_kwargs["system"]
+    system = chat.complete.call_args[1]["system"]
+    assert "/email" in system
+    assert "bandeja" in system
 
 
-async def test_handle_text_email_line_present_when_has_email():
+async def test_system_prompt_shows_email_not_configured():
     memory = AsyncMock()
     memory.build_context = AsyncMock(return_value="")
     chat = AsyncMock()
     chat.complete = AsyncMock(return_value="ok")
-
-    profile = {
-        "bot_name": "Marcos",
-        "gender": "masculine",
-        "preferred_name": "Alejandro",
-        "language": "español",
-        "has_email": True,
-        "has_calendar": False,
-    }
 
     await handle_text(
         message="test",
-        employee_name="Alejandro",
+        employee_name="Juan",
         memory=memory,
         chat=chat,
-        profile=profile,
+        email_configured=False,
     )
 
-    call_kwargs = chat.complete.call_args[1]
-    assert "email" in call_kwargs["system"].lower()
-
-
-async def test_handle_text_no_profile_fallback():
-    memory = AsyncMock()
-    memory.build_context = AsyncMock(return_value="")
-    chat = AsyncMock()
-    chat.complete = AsyncMock(return_value="ok")
-
-    await handle_text(
-        message="hola",
-        employee_name="Test",
-        memory=memory,
-        chat=chat,
-        profile=None,
-    )
-
-    call_kwargs = chat.complete.call_args[1]
-    assert "Test" in call_kwargs["system"]
+    system = chat.complete.call_args[1]["system"]
+    assert "/config email" in system
+    assert "sin configurar" in system

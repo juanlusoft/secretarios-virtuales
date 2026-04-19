@@ -1,3 +1,4 @@
+from typing import cast
 from uuid import UUID
 
 import asyncpg
@@ -62,7 +63,9 @@ class Repository:
             """,
             self._employee_id, filename, filepath, content_text, vec_str, mime_type,
         )
-        return row["id"]  # type: ignore[index]
+        if row is None:
+            raise RuntimeError("Failed to save document")
+        return cast(UUID, row["id"])
 
     async def search_documents(
         self, embedding: list[float], limit: int = 5
@@ -130,7 +133,9 @@ class Repository:
             """,
             self._employee_id, title, description,
         )
-        return row["id"]  # type: ignore[index]
+        if row is None:
+            raise RuntimeError("Failed to save task")
+        return cast(UUID, row["id"])
 
     async def get_pending_tasks(self) -> list[Task]:
         rows = await self._conn.fetch(

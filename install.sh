@@ -45,14 +45,21 @@ step "1/7 · Actualizando lista de paquetes"
 sudo apt-get update -qq
 ok "Lista de paquetes actualizada"
 
-# ─── 2. Python 3.11 ─────────────────────────────────────────────────────────
-step "2/7 · Python 3.11"
+# ─── 2. Python 3.11+ ────────────────────────────────────────────────────────
+step "2/7 · Python 3.11+"
 
 if command -v python3.11 &>/dev/null; then
     ok "Python 3.11 ya instalado: $(python3.11 --version)"
     PYTHON_BIN="$(command -v python3.11)"
+elif command -v python3.12 &>/dev/null; then
+    ok "Python 3.12 detectado (compatible): $(python3.12 --version)"
+    PYTHON_BIN="$(command -v python3.12)"
+    sudo apt-get install -y python3.12-venv python3.12-dev build-essential
 else
-    info "Python 3.11 no encontrado. Instalando..."
+    info "Python 3.11 no encontrado. Instalando via deadsnakes PPA..."
+    sudo apt-get install -y software-properties-common
+    sudo add-apt-repository -y ppa:deadsnakes/ppa
+    sudo apt-get update -qq
     sudo apt-get install -y python3.11 python3.11-venv python3.11-dev build-essential
     ok "Python 3.11 instalado"
     PYTHON_BIN="$(command -v python3.11)"
@@ -64,8 +71,19 @@ step "3/7 · uv (gestor de paquetes Python)"
 if command -v uv &>/dev/null; then
     ok "uv ya instalado: $(uv --version)"
 else
-    info "uv no encontrado. Instalando..."
-    curl -LsSf https://astral.sh/uv/install.sh | sh
+    # Pinned uv version — update UV_VERSION here to upgrade
+    UV_VERSION="0.7.3"
+    UV_INSTALL_URL="https://github.com/astral-sh/uv/releases/download/${UV_VERSION}/uv-installer.sh"
+    UV_CHECKSUM_URL="${UV_INSTALL_URL}.sha256"
+    UV_INSTALLER="$(mktemp)"
+    info "Instalando uv ${UV_VERSION}..."
+    curl -LsSf "${UV_INSTALL_URL}" -o "${UV_INSTALLER}"
+    EXPECTED_SHA="$(curl -LsSf "${UV_CHECKSUM_URL}" | awk '{print $1}')"
+    ACTUAL_SHA="$(sha256sum "${UV_INSTALLER}" | awk '{print $1}')"
+    [[ -n "${EXPECTED_SHA}" ]] || fail "No se pudo obtener el checksum de uv installer"
+    [[ "${EXPECTED_SHA}" == "${ACTUAL_SHA}" ]] || fail "Checksum de uv installer no coincide"
+    sh "${UV_INSTALLER}"
+    rm -f "${UV_INSTALLER}"
     # Añadir al PATH de la sesión actual
     export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
     if ! command -v uv &>/dev/null; then
@@ -260,7 +278,7 @@ Group=${CURRENT_USER}
 WorkingDirectory=${SCRIPT_DIR}
 Environment="PATH=${VENV_DIR}/bin:/usr/local/bin:/usr/bin:/bin"
 EnvironmentFile=${SCRIPT_DIR}/.env
-ExecStartPre=/bin/bash -c '${DOCKER_CMD} compose -f ${SCRIPT_DIR}/infrastructure/docker-compose.yml up -d postgres redis'
+ExecStartPre=/bin/bash -c '${DOCKER_CMD} compose -f ${SCRIPT_DIR}/infrastructure/docker-compose.yml --profile gpu up -d'
 ExecStart=${VENV_DIR}/bin/python -m supervisor
 Restart=always
 RestartSec=10

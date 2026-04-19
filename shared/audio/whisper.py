@@ -14,4 +14,8 @@ class WhisperClient:
             )
         if response.status_code != 200:
             raise RuntimeError(f"Whisper error {response.status_code}: {response.text}")
-        return response.json()["text"]
+        payload = response.json()
+        text = payload.get("text")
+        if not isinstance(text, str):
+            raise RuntimeError("Whisper response missing text field")
+        return text

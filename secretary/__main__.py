@@ -8,25 +8,28 @@ from uuid import UUID
 import asyncpg
 from dotenv import load_dotenv
 
-load_dotenv()
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s"
-)
-
+from secretary.agent import SecretaryAgent
 from shared.audio.whisper import WhisperClient
 from shared.crypto import CredentialStore
 from shared.db.pool import DatabasePool
 from shared.llm.chat import ChatClient
 from shared.llm.embeddings import EmbeddingClient
-from secretary.agent import SecretaryAgent
+
+load_dotenv()
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(name)s %(levelname)s %(message)s",
+)
 
 
 async def main(employee_id_str: str) -> None:
     employee_id = UUID(employee_id_str)
+    app_dsn = os.environ.get("APP_DB_URL", os.environ["DATABASE_URL"])
 
-    raw_conn = await asyncpg.connect(os.environ["DATABASE_URL"])
+    raw_conn = await asyncpg.connect(app_dsn)
     row = await raw_conn.fetchrow(
-        "SELECT name, telegram_chat_id FROM employees WHERE id = $1", employee_id
+        "SELECT name, telegram_chat_id FROM employees WHERE id = $1",
+        employee_id,
     )
     await raw_conn.close()
 
@@ -37,12 +40,16 @@ async def main(employee_id_str: str) -> None:
     employee_name = row["name"]
     telegram_chat_id = row["telegram_chat_id"]
 
-    raw_conn = await asyncpg.connect(os.environ["DATABASE_URL"])
+    raw_conn = await asyncpg.connect(app_dsn)
     await raw_conn.execute(
-        "SELECT set_config('app.current_employee_id', $1, true)", str(employee_id)
+        "SELECT set_config('app.current_employee_id', $1, true)",
+        str(employee_id),
     )
     enc_token = await raw_conn.fetchval(
-        "SELECT encrypted FROM credentials WHERE employee_id=$1 AND service_type='telegram_token'",
+        (
+            "SELECT encrypted FROM credentials "
+            "WHERE employee_id=$1 AND service_type='telegram_token'"
+        ),
         employee_id,
     )
     await raw_conn.close()
@@ -51,7 +58,7 @@ async def main(employee_id_str: str) -> None:
     store = CredentialStore(fernet_key)
     bot_token = store.decrypt(enc_token)
 
-    pool = DatabasePool(os.environ["DATABASE_URL"], employee_id)
+    pool = DatabasePool(app_dsn, employee_id)
     await pool.connect()
 
     agent = SecretaryAgent(

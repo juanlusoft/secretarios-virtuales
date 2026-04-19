@@ -1,29 +1,29 @@
 from secretary.memory import MemoryManager
 from shared.llm.chat import ChatClient
 
-SYSTEM_TEMPLATE = """Eres {bot_name}, secretari{gender_suffix} virtual de {preferred_name}.
+_SYSTEM_TEMPLATE = """\
+Eres el secretario virtual personal de {name}. Eres profesional, directo y resolutivo.
+Respondes SIEMPRE en español, con mensajes concisos y sin relleno.
 
-PERSONALIDAD:
-- Trato formal pero cercano, con un estilo propio que vas desarrollando.
-- {gender_instructions}
-- Responde siempre en {language}, salvo que {preferred_name} te escriba en otro idioma.
+CAPACIDADES DISPONIBLES:
+- 💬 Conversación: recuerdas el historial reciente y buscas en conversaciones anteriores.
+- 📄 Documentos: el usuario puede enviarte PDFs o archivos de texto y consultarte sobre su contenido.
+- 🎙 Voz: transcribes mensajes de audio y respondes a su contenido.
+- 📷 Fotos: analizas imágenes y describes o interpretas su contenido.
+{email_section}
+COMANDOS DISPONIBLES:
+{commands_section}
 
-CAPACIDADES — usa estas sin dudar cuando te las pidan:
-- Leer y resumir documentos (PDF, DOCX, TXT)
-- Transcribir y responder mensajes de voz
-- Analizar y describir imágenes y fotos
-- Gestionar tareas y recordatorios{email_line}{calendar_line}
-
-CONTEXTO DE CONVERSACIÓN Y DOCUMENTOS:
-{context}
-
-REGLA IMPORTANTE: Nunca rechaces una tarea que esté dentro de las capacidades listadas. Si no puedes hacer algo concreto, explica exactamente el motivo."""
-
-FALLBACK_TEMPLATE = """Eres el secretario virtual de {name}.
-Eres profesional, conciso y útil.
-Respondes siempre en el idioma en que te escribe {name}.
+IMPORTANTE: Nunca digas que "no puedes" hacer algo que aparece en las capacidades anteriores.\
+ Si necesitas más información para completar una acción, pídela.
 
 {context}"""
+
+_EMAIL_ON = "- 📧 Email: puedes revisar y resumir la bandeja de entrada del usuario."
+_EMAIL_OFF = "- 📧 Email: disponible pero sin configurar. El usuario puede usar /config email para activarlo."
+
+_COMMANDS_WITH_EMAIL = "/email — revisar bandeja de entrada\n/config email — cambiar configuración de email"
+_COMMANDS_NO_EMAIL = "/config email — configurar cuenta de email"
 
 
 async def handle_text(
@@ -31,42 +31,15 @@ async def handle_text(
     employee_name: str,
     memory: MemoryManager,
     chat: ChatClient,
-    profile: dict | None = None,
+    email_configured: bool = False,
 ) -> str:
     context = await memory.build_context(message)
-
-    if profile:
-        gender = profile.get("gender", "masculine")
-        gender_suffix = "a" if gender == "feminine" else "o"
-        gender_instructions = (
-            "Utiliza forma femenina al referirte a ti misma."
-            if gender == "feminine"
-            else "Utiliza forma masculina al referirte a ti mismo."
-        )
-        preferred_name = profile.get("preferred_name", employee_name)
-        email_line = (
-            f"\n- Leer y gestionar el email de {preferred_name} (configurado)"
-            if profile.get("has_email")
-            else ""
-        )
-        calendar_line = (
-            f"\n- Acceder al calendario de {preferred_name} (configurado)"
-            if profile.get("has_calendar")
-            else ""
-        )
-        system = SYSTEM_TEMPLATE.format(
-            bot_name=profile.get("bot_name", "tu secretario"),
-            gender_suffix=gender_suffix,
-            preferred_name=preferred_name,
-            gender_instructions=gender_instructions,
-            language=profile.get("language", "español"),
-            email_line=email_line,
-            calendar_line=calendar_line,
-            context=context,
-        )
-    else:
-        system = FALLBACK_TEMPLATE.format(name=employee_name, context=context)
-
+    system = _SYSTEM_TEMPLATE.format(
+        name=employee_name,
+        email_section=_EMAIL_ON if email_configured else _EMAIL_OFF,
+        commands_section=_COMMANDS_WITH_EMAIL if email_configured else _COMMANDS_NO_EMAIL,
+        context=context,
+    )
     return await chat.complete(
         messages=[{"role": "user", "content": message}],
         system=system,

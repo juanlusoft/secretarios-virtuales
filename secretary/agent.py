@@ -1,5 +1,6 @@
-import json
+import asyncio
 import logging
+from contextlib import suppress
 from pathlib import Path
 from uuid import UUID
 
@@ -13,10 +14,9 @@ from telegram.ext import (
 )
 
 from secretary.handlers.audio import handle_audio
-from secretary.handlers.config_email import build_config_email_handler
+from secretary.handlers.config_email import EmailConfigFlow
 from secretary.handlers.document import handle_document
 from secretary.handlers.email import handle_check_email
-from secretary.handlers.onboarding import build_onboarding_handler
 from secretary.handlers.photo import handle_photo
 from secretary.handlers.text import handle_text
 from secretary.memory import MemoryManager
@@ -56,7 +56,8 @@ class SecretaryAgent:
         self._documents_dir = documents_dir
         self._store = CredentialStore(fernet_key)
         self._redis_url = redis_url
-        self._profile: dict | None = None
+        self._config_email = EmailConfigFlow(employee_id, db_pool, self._store)
+        self._email_configured: bool | None = None  # lazily checked, invalidated on save
 
     async def _is_authorized(self, update: Update) -> bool:
         return str(update.effective_chat.id) == self._allowed_chat_id  # type: ignore[union-attr]
@@ -68,6 +69,7 @@ class SecretaryAgent:
             enc_smtp = await repo.get_credential("email_smtp")
         if not enc_imap or not enc_smtp:
             return None
+        import json
         imap = json.loads(self._store.decrypt(enc_imap))
         smtp = json.loads(self._store.decrypt(enc_smtp))
         return EmailClient(
@@ -81,35 +83,38 @@ class SecretaryAgent:
             )
         )
 
-    async def _load_profile(self) -> dict | None:
-        async with self._pool.acquire() as conn:
-            repo = Repository(conn, self._employee_id)
-            encrypted = await repo.get_credential("profile")
-        if not encrypted:
-            return None
-        return json.loads(self._store.decrypt(encrypted))
-
-    async def _save_profile(self, profile: dict) -> None:
-        encrypted = self._store.encrypt(json.dumps(profile))
-        async with self._pool.acquire() as conn:
-            repo = Repository(conn, self._employee_id)
-            await repo.save_credential("profile", encrypted)
-
-    async def _save_email_credentials(self, imap_json: str, smtp_json: str) -> None:
-        async with self._pool.acquire() as conn:
-            repo = Repository(conn, self._employee_id)
-            await repo.save_credential("email_imap", self._store.encrypt(imap_json))
-            await repo.save_credential("email_smtp", self._store.encrypt(smtp_json))
+    async def _check_email_configured(self) -> bool:
+        if self._email_configured is None:
+            async with self._pool.acquire() as conn:
+                repo = Repository(conn, self._employee_id)
+                self._email_configured = await repo.get_credential("email_imap") is not None
+        return self._email_configured
 
     async def _handle_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._is_authorized(update):
             return
-        msg = update.message.text or ""  # type: ignore[union-attr]
+        msg = (update.message.text or "").strip()  # type: ignore[union-attr]
+
+        # Active config wizard intercepts all input
+        if self._config_email.active:
+            reply, saved = await self._config_email.handle(msg)
+            if saved:
+                self._email_configured = True
+            await update.message.reply_text(reply, parse_mode="Markdown")  # type: ignore[union-attr]
+            return
+
+        if msg.lower() in ("/config email", "/config_email"):
+            reply = self._config_email.start()
+            await update.message.reply_text(reply, parse_mode="Markdown")  # type: ignore[union-attr]
+            return
 
         if msg.lower().startswith("/email"):
             email_client = await self._get_email_client()
             if not email_client:
-                await update.message.reply_text("❌ Email no configurado.")  # type: ignore[union-attr]
+                await update.message.reply_text(  # type: ignore[union-attr]
+                    "❌ Email no configurado. Usa */config email* para activarlo.",
+                    parse_mode="Markdown",
+                )
                 return
             async with self._pool.acquire() as conn:
                 repo = Repository(conn, self._employee_id)
@@ -123,6 +128,7 @@ class SecretaryAgent:
             await update.message.reply_text(response)  # type: ignore[union-attr]
             return
 
+        email_configured = await self._check_email_configured()
         async with self._pool.acquire() as conn:
             repo = Repository(conn, self._employee_id)
             memory = MemoryManager(repo=repo, embed_client=self._embed)
@@ -131,7 +137,7 @@ class SecretaryAgent:
                 employee_name=self._employee_name,
                 memory=memory,
                 chat=self._chat,
-                profile=self._profile,
+                email_configured=email_configured,
             )
             await memory.save_turn(msg, response)
         await update.message.reply_text(response)  # type: ignore[union-attr]
@@ -140,6 +146,8 @@ class SecretaryAgent:
         if not await self._is_authorized(update):
             return
         voice = update.message.voice  # type: ignore[union-attr]
+        if voice is None:
+            return
         file = await context.bot.get_file(voice.file_id)
         audio_bytes = await file.download_as_bytearray()
 
@@ -153,7 +161,6 @@ class SecretaryAgent:
                 whisper=self._whisper,
                 memory=memory,
                 chat=self._chat,
-                profile=self._profile,
             )
             await memory.save_turn(transcription, response)
 
@@ -165,6 +172,8 @@ class SecretaryAgent:
         if not await self._is_authorized(update):
             return
         doc = update.message.document  # type: ignore[union-attr]
+        if doc is None:
+            return
         file = await context.bot.get_file(doc.file_id)
         file_bytes = await file.download_as_bytearray()
 
@@ -202,27 +211,38 @@ class SecretaryAgent:
         await update.message.reply_text(response)  # type: ignore[union-attr]
 
     async def _listen_redis(self, app: Application) -> None:  # type: ignore[type-arg]
-        redis = await aioredis.from_url(self._redis_url)
-        pubsub = redis.pubsub()
+        import json
         channel = f"secretary.{self._employee_id}"
-        await pubsub.subscribe(channel)
-        async for message in pubsub.listen():
-            if message["type"] != "message":
-                continue
-            data = json.loads(message["data"])
-            if data.get("type") == "admin_message":
-                await app.bot.send_message(
-                    chat_id=self._allowed_chat_id,
-                    text=data["content"],
+        retry_delay = 1.0
+        while True:
+            try:
+                redis = aioredis.from_url(self._redis_url)  # type: ignore[no-untyped-call]
+                pubsub = redis.pubsub()
+                await pubsub.subscribe(channel)
+                logger.info("Redis listener subscribed to channel %s", channel)
+                retry_delay = 1.0  # reset back-off on successful connection
+                async for message in pubsub.listen():
+                    if message["type"] != "message":
+                        continue
+                    data = json.loads(message["data"])
+                    if data.get("type") == "admin_message":
+                        await app.bot.send_message(
+                            chat_id=self._allowed_chat_id,
+                            text=data["content"],
+                        )
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception(
+                    "Redis listener error on channel %s; retrying in %.1fs",
+                    channel,
+                    retry_delay,
                 )
+                await asyncio.sleep(retry_delay)
+                retry_delay = min(retry_delay * 2, 60.0)
 
     async def run(self, bot_token: str) -> None:
-        self._profile = await self._load_profile()
-
         app = Application.builder().token(bot_token).build()
-
-        app.add_handler(build_onboarding_handler(self))
-        app.add_handler(build_config_email_handler(self))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_text))
         app.add_handler(MessageHandler(filters.COMMAND, self._handle_text))
         app.add_handler(MessageHandler(filters.VOICE, self._handle_voice))
@@ -232,4 +252,16 @@ class SecretaryAgent:
         logger.info(
             "Secretary %s starting (chat_id=%s)", self._employee_name, self._allowed_chat_id
         )
-        await app.run_polling(drop_pending_updates=True)
+        async with app:
+            if app.updater is None:
+                raise RuntimeError("Telegram updater is not available")
+
+            await app.start()
+            await app.updater.start_polling(drop_pending_updates=True)
+            redis_task = asyncio.create_task(self._listen_redis(app))
+            try:
+                await asyncio.Event().wait()
+            finally:
+                redis_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await redis_task

@@ -1,5 +1,5 @@
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 from uuid import UUID
 
 import asyncpg
@@ -24,7 +24,7 @@ class DatabasePool:
             raise RuntimeError("Call connect() first")
         async with self._pool.acquire() as conn:
             await conn.execute(
-                "SELECT set_config('app.current_employee_id', $1, true)",
+                "SELECT set_config('app.current_employee_id', $1, false)",
                 str(self._employee_id),
             )
             yield conn

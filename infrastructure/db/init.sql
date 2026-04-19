@@ -66,7 +66,7 @@ CREATE POLICY isolate ON tasks
     FOR ALL USING (employee_id = current_setting('app.current_employee_id', true)::uuid);
 
 -- Application role (non-superuser, subject to RLS)
-CREATE ROLE svapp LOGIN PASSWORD 'svapppassword';
+CREATE ROLE svapp LOGIN;
 GRANT CONNECT ON DATABASE secretarios TO svapp;
 GRANT USAGE ON SCHEMA public TO svapp;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO svapp;

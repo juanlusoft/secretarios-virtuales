@@ -43,10 +43,14 @@ class EmailClient:
                 if parsed.is_multipart():
                     for part in parsed.walk():
                         if part.get_content_type() == "text/plain":
-                            body = part.get_payload(decode=True).decode(errors="replace")
+                            payload = part.get_payload(decode=True)
+                            if isinstance(payload, bytes):
+                                body = payload.decode(errors="replace")
                             break
                 else:
-                    body = parsed.get_payload(decode=True).decode(errors="replace")  # type: ignore[union-attr]
+                    payload = parsed.get_payload(decode=True)
+                    if isinstance(payload, bytes):
+                        body = payload.decode(errors="replace")
 
                 messages.append(
                     EmailMessage(

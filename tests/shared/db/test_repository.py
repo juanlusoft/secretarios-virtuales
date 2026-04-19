@@ -1,5 +1,10 @@
-import pytest
+import pathlib
+import tempfile
 from uuid import uuid4
+
+import asyncpg
+import pytest
+
 from shared.db.pool import DatabasePool
 from shared.db.repository import Repository
 
@@ -10,7 +15,11 @@ TEST_DSN = "postgresql://svuser:svpassword@localhost:5432/secretarios"
 
 @pytest.fixture
 async def pool_and_employee():
-    conn = await __import__("asyncpg").connect(TEST_DSN)
+    try:
+        conn = await asyncpg.connect(TEST_DSN)
+    except Exception as exc:  # pragma: no cover - env-dependent
+        pytest.skip(f"PostgreSQL no disponible para test de integracion: {exc}")
+
     employee_id = uuid4()
     await conn.execute(
         "INSERT INTO employees (id, name) VALUES ($1, $2)",
@@ -23,7 +32,7 @@ async def pool_and_employee():
     yield pool, employee_id
 
     await pool.close()
-    conn = await __import__("asyncpg").connect(TEST_DSN)
+    conn = await asyncpg.connect(TEST_DSN)
     await conn.execute("DELETE FROM employees WHERE id = $1", employee_id)
     await conn.close()
 
@@ -44,7 +53,7 @@ async def test_save_and_retrieve_conversation(pool_and_employee):
 async def test_isolation_between_employees(pool_and_employee):
     pool_a, id_a = pool_and_employee
 
-    conn_raw = await __import__("asyncpg").connect(TEST_DSN)
+    conn_raw = await asyncpg.connect(TEST_DSN)
     id_b = uuid4()
     await conn_raw.execute(
         "INSERT INTO employees (id, name) VALUES ($1, $2)", id_b, f"test-{id_b}"
@@ -64,14 +73,14 @@ async def test_isolation_between_employees(pool_and_employee):
         assert len(convs) == 0
     finally:
         await pool_b.close()
-        conn_raw = await __import__("asyncpg").connect(TEST_DSN)
+        conn_raw = await asyncpg.connect(TEST_DSN)
         await conn_raw.execute("DELETE FROM employees WHERE id = $1", id_b)
         await conn_raw.close()
 
 
 async def test_save_and_search_document(pool_and_employee):
     pool, employee_id = pool_and_employee
-    import tempfile, pathlib
+
     tmp = pathlib.Path(tempfile.mkdtemp()) / str(employee_id)
     tmp.mkdir(parents=True, exist_ok=True)
     filepath = str(tmp / "test.txt")

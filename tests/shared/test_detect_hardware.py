@@ -1,6 +1,6 @@
-import pytest
 from unittest.mock import patch
-from infrastructure.setup.detect_hardware import detect_hardware, Profile
+
+from infrastructure.setup.detect_hardware import detect_hardware
 
 
 def test_detects_spark_profile():

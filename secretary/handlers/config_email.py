@@ -1,151 +1,137 @@
+from __future__ import annotations
+
 import json
+from enum import Enum, auto
+from uuid import UUID
 
-from telegram import Update
-from telegram.ext import (
-    CommandHandler,
-    ConversationHandler,
-    ContextTypes,
-    MessageHandler,
-    filters,
-)
-
-from secretary.handlers._email_providers import get_provider
-
-(
-    CE_ADDRESS,
-    CE_PASS,
-    CE_IMAP_HOST,
-    CE_IMAP_PORT,
-    CE_SMTP_HOST,
-    CE_SMTP_PORT,
-    CE_USER,
-    CE_PASS_CUSTOM,
-) = range(8)
+from shared.crypto import CredentialStore
+from shared.db.pool import DatabasePool
+from shared.db.repository import Repository
 
 
-def build_config_email_handler(agent) -> ConversationHandler:  # type: ignore[type-arg]
+class _Step(Enum):
+    IMAP_HOST = auto()
+    IMAP_PORT = auto()
+    SMTP_HOST = auto()
+    SMTP_PORT = auto()
+    USERNAME = auto()
+    PASSWORD = auto()
+    CONFIRM = auto()
 
-    async def cmd_config_email(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        if not await agent._is_authorized(update):
-            return ConversationHandler.END
-        await update.message.reply_text(  # type: ignore[union-attr]
-            "📧 *Configuración de email*\n\nEscribe tu dirección de correo:",
-            parse_mode="Markdown",
-        )
-        return CE_ADDRESS
 
-    async def receive_address(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        email = update.message.text.strip().lower()  # type: ignore[union-attr]
-        context.user_data["ce_username"] = email  # type: ignore[index]
-        provider = get_provider(email)
-        if provider:
-            context.user_data["ce_provider"] = provider  # type: ignore[index]
-            domain = email.split("@")[-1]
-            await update.message.reply_text(  # type: ignore[union-attr]
-                f"✅ Proveedor detectado: *{domain}*.\n\nContraseña del email:",
-                parse_mode="Markdown",
-            )
-            return CE_PASS
-        await update.message.reply_text("Servidor IMAP (ej: mail.tuempresa.com):")  # type: ignore[union-attr]
-        return CE_IMAP_HOST
+_PROMPTS: dict[_Step, str] = {
+    _Step.IMAP_HOST: "Paso 1/6 — Servidor IMAP _(ej: imap.gmail.com)_:",
+    _Step.IMAP_PORT: "Paso 2/6 — Puerto IMAP _(pulsa Enter para usar 993)_:",
+    _Step.SMTP_HOST: "Paso 3/6 — Servidor SMTP _(ej: smtp.gmail.com)_:",
+    _Step.SMTP_PORT: "Paso 4/6 — Puerto SMTP _(pulsa Enter para usar 587)_:",
+    _Step.USERNAME: "Paso 5/6 — Usuario (tu dirección de email):",
+    _Step.PASSWORD: "Paso 6/6 — Contraseña _(o contraseña de aplicación)_:",
+}
 
-    async def receive_pass(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        password = update.message.text.strip()  # type: ignore[union-attr]
-        await update.message.delete()  # type: ignore[union-attr]
-        provider = context.user_data["ce_provider"]  # type: ignore[index]
-        username = context.user_data["ce_username"]  # type: ignore[index]
+_CANCEL_WORDS = {"cancelar", "/cancelar", "cancel", "/cancel"}
+
+
+class EmailConfigFlow:
+    """Multi-step wizard to collect and save IMAP/SMTP credentials."""
+
+    def __init__(self, employee_id: UUID, pool: DatabasePool, store: CredentialStore) -> None:
+        self._employee_id = employee_id
+        self._pool = pool
+        self._store = store
+        self._step: _Step | None = None
+        self._data: dict[str, str | int] = {}
+
+    @property
+    def active(self) -> bool:
+        return self._step is not None
+
+    def start(self) -> str:
+        self._step = _Step.IMAP_HOST
+        self._data = {}
+        return "⚙️ *Configuración de email* — escribe `cancelar` en cualquier momento para salir.\n\n" + _PROMPTS[_Step.IMAP_HOST]
+
+    async def handle(self, text: str) -> tuple[str, bool]:
+        """Process one step. Returns (reply, email_saved)."""
+        text = text.strip()
+
+        if text.lower() in _CANCEL_WORDS:
+            self._step = None
+            return "❌ Configuración cancelada.", False
+
+        step = self._step
+        reply, saved = await self._advance(step, text)  # type: ignore[arg-type]
+        return reply, saved
+
+    async def _advance(self, step: _Step, text: str) -> tuple[str, bool]:
+        if step == _Step.IMAP_HOST:
+            self._data["imap_host"] = text
+            self._step = _Step.IMAP_PORT
+            return _PROMPTS[_Step.IMAP_PORT], False
+
+        if step == _Step.IMAP_PORT:
+            try:
+                self._data["imap_port"] = int(text) if text else 993
+            except ValueError:
+                return "❌ Puerto inválido, introduce un número:", False
+            self._step = _Step.SMTP_HOST
+            return _PROMPTS[_Step.SMTP_HOST], False
+
+        if step == _Step.SMTP_HOST:
+            self._data["smtp_host"] = text
+            self._step = _Step.SMTP_PORT
+            return _PROMPTS[_Step.SMTP_PORT], False
+
+        if step == _Step.SMTP_PORT:
+            try:
+                self._data["smtp_port"] = int(text) if text else 587
+            except ValueError:
+                return "❌ Puerto inválido, introduce un número:", False
+            self._step = _Step.USERNAME
+            return _PROMPTS[_Step.USERNAME], False
+
+        if step == _Step.USERNAME:
+            self._data["username"] = text
+            self._step = _Step.PASSWORD
+            return _PROMPTS[_Step.PASSWORD], False
+
+        if step == _Step.PASSWORD:
+            self._data["password"] = text
+            self._step = _Step.CONFIRM
+            d = self._data
+            return (
+                f"✅ *Resumen:*\n"
+                f"• IMAP: `{d['imap_host']}:{d['imap_port']}`\n"
+                f"• SMTP: `{d['smtp_host']}:{d['smtp_port']}`\n"
+                f"• Usuario: `{d['username']}`\n\n"
+                f"¿Confirmar? *(sí / no)*"
+            ), False
+
+        if step == _Step.CONFIRM:
+            if text.lower() in ("sí", "si", "s", "yes", "y"):
+                await self._save()
+                self._step = None
+                return "✅ Email configurado. Usa */email* para revisar tu bandeja de entrada.", True
+            else:
+                self._step = None
+                return "❌ Cancelado. Usa */config email* para volver a intentarlo.", False
+
+        return "Error interno.", False
+
+    async def _save(self) -> None:
+        d = self._data
         imap_json = json.dumps({
-            "host": provider["imap_host"], "port": provider["imap_port"],
-            "username": username, "password": password,
+            "host": d["imap_host"],
+            "port": d["imap_port"],
+            "username": d["username"],
+            "password": d["password"],
         })
         smtp_json = json.dumps({
-            "host": provider["smtp_host"], "port": provider["smtp_port"],
-            "username": username, "password": password,
+            "host": d["smtp_host"],
+            "port": d["smtp_port"],
         })
-        await agent._save_email_credentials(imap_json, smtp_json)
-        await _set_has_email(agent)
-        await update.message.reply_text("✅ Email configurado correctamente.")  # type: ignore[union-attr]
-        return ConversationHandler.END
-
-    async def receive_imap_host(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        context.user_data["ce_imap_host"] = update.message.text.strip()  # type: ignore[union-attr, index]
-        await update.message.reply_text("Puerto IMAP (normalmente 993):")  # type: ignore[union-attr]
-        return CE_IMAP_PORT
-
-    async def receive_imap_port(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        raw = update.message.text.strip()  # type: ignore[union-attr]
-        if not raw.isdigit():
-            await update.message.reply_text("Por favor, ingresa un número de puerto válido (ej: 993):")  # type: ignore[union-attr]
-            return CE_IMAP_PORT
-        context.user_data["ce_imap_port"] = raw  # type: ignore[index]
-        await update.message.reply_text("Servidor SMTP (ej: smtp.tuempresa.com):")  # type: ignore[union-attr]
-        return CE_SMTP_HOST
-
-    async def receive_smtp_host(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        context.user_data["ce_smtp_host"] = update.message.text.strip()  # type: ignore[union-attr, index]
-        await update.message.reply_text("Puerto SMTP (normalmente 587):")  # type: ignore[union-attr]
-        return CE_SMTP_PORT
-
-    async def receive_smtp_port(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        raw = update.message.text.strip()  # type: ignore[union-attr]
-        if not raw.isdigit():
-            await update.message.reply_text("Por favor, ingresa un número de puerto válido (ej: 587):")  # type: ignore[union-attr]
-            return CE_SMTP_PORT
-        context.user_data["ce_smtp_port"] = raw  # type: ignore[index]
-        await update.message.reply_text("Usuario del correo:")  # type: ignore[union-attr]
-        return CE_USER
-
-    async def receive_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        context.user_data["ce_username"] = update.message.text.strip()  # type: ignore[union-attr, index]
-        await update.message.reply_text("Contraseña:")  # type: ignore[union-attr]
-        return CE_PASS_CUSTOM
-
-    async def receive_pass_custom(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        password = update.message.text.strip()  # type: ignore[union-attr]
-        await update.message.delete()  # type: ignore[union-attr]
-        username = context.user_data["ce_username"]  # type: ignore[index]
-        imap_json = json.dumps({
-            "host": context.user_data["ce_imap_host"],  # type: ignore[index]
-            "port": int(context.user_data["ce_imap_port"]),  # type: ignore[index]
-            "username": username, "password": password,
-        })
-        smtp_json = json.dumps({
-            "host": context.user_data["ce_smtp_host"],  # type: ignore[index]
-            "port": int(context.user_data["ce_smtp_port"]),  # type: ignore[index]
-            "username": username, "password": password,
-        })
-        await agent._save_email_credentials(imap_json, smtp_json)
-        await _set_has_email(agent)
-        await update.message.reply_text("✅ Email configurado correctamente.")  # type: ignore[union-attr]
-        return ConversationHandler.END
-
-    async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        await update.message.reply_text("Configuración de email cancelada.")  # type: ignore[union-attr]
-        return ConversationHandler.END
-
-    _text = filters.TEXT & ~filters.COMMAND
-
-    return ConversationHandler(
-        entry_points=[CommandHandler("config_email", cmd_config_email)],
-        states={
-            CE_ADDRESS:    [MessageHandler(_text, receive_address)],
-            CE_PASS:       [MessageHandler(_text, receive_pass)],
-            CE_IMAP_HOST:  [MessageHandler(_text, receive_imap_host)],
-            CE_IMAP_PORT:  [MessageHandler(_text, receive_imap_port)],
-            CE_SMTP_HOST:  [MessageHandler(_text, receive_smtp_host)],
-            CE_SMTP_PORT:  [MessageHandler(_text, receive_smtp_port)],
-            CE_USER:       [MessageHandler(_text, receive_user)],
-            CE_PASS_CUSTOM:[MessageHandler(_text, receive_pass_custom)],
-        },
-        fallbacks=[CommandHandler("cancel", cancel)],
-        per_user=True,
-        per_chat=True,
-    )
-
-
-async def _set_has_email(agent) -> None:  # type: ignore[type-arg]
-    profile = await agent._load_profile()
-    if profile:
-        profile["has_email"] = True
-        await agent._save_profile(profile)
-        agent._profile = profile
+        enc_imap = self._store.encrypt(imap_json)
+        enc_smtp = self._store.encrypt(smtp_json)
+        async with self._pool.acquire() as conn:
+            repo = Repository(conn, self._employee_id)
+            await repo.save_credential("email_imap", enc_imap)
+            await repo.save_credential("email_smtp", enc_smtp)
