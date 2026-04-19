@@ -140,19 +140,27 @@ class SecretaryAgent:
             email_client = await self._get_email_client()
             if not email_client:
                 await update.message.reply_text(  # type: ignore[union-attr]
-                    "❌ Email no configurado. Usa */config email* para activarlo.",
+                    "❌ Email no configurado. Usa */config_email* para activarlo.",
                     parse_mode="Markdown",
                 )
                 return
-            async with self._pool.acquire() as conn:
-                repo = Repository(conn, self._employee_id)
-                memory = MemoryManager(repo=repo, embed_client=self._embed)
-                response = await handle_check_email(
-                    email_client=email_client,
-                    chat=self._chat,
-                    employee_name=self._employee_name,
-                )
-                await memory.save_turn(msg, response)
+            try:
+                async with self._pool.acquire() as conn:
+                    repo = Repository(conn, self._employee_id)
+                    memory = MemoryManager(repo=repo, embed_client=self._embed)
+                    response = await asyncio.wait_for(
+                        handle_check_email(
+                            email_client=email_client,
+                            chat=self._chat,
+                            employee_name=self._employee_name,
+                        ),
+                        timeout=30.0,
+                    )
+                    await memory.save_turn(msg, response)
+            except asyncio.TimeoutError:
+                response = "⏱ El servidor de email tardó demasiado. Comprueba los datos con /config_email."
+            except Exception as exc:
+                response = f"❌ Error al conectar con el email: {exc}"
             await update.message.reply_text(response)  # type: ignore[union-attr]
             return
 
