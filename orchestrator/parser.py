@@ -31,8 +31,11 @@ _TOKEN_RE = re.compile(r"\d{5,12}:[\w_-]{30,60}")
 # Matches any natural variation of "create a secretary for X":
 # crea/créale/haz/hazle/configura/añade/agrega un secretario/bot/asistente para/a/de X
 _CREATE_PATTERN = re.compile(
-    r"(?:crea(?:le)?|haz(?:le)?|configura|a[ñn]ade|agrega|registra|pon(?:le)?)\s+"
-    r"(?:(?:un|el|al?)\s+)?(?:secretario|bot|asistente)\s+"
+    r"(?:"
+    r"(?:vamos\s+a\s+|quiero\s+|necesito\s+|hay\s+que\s+)?crear?\s+(?:(?:un[ao]?|el|la|al?)\s+)?"
+    r"|crea(?:le)?|haz(?:le)?|configura|a[ñn]ade|agrega|registra|pon(?:le)?"
+    r")\s*"
+    r"(?:(?:un[ao]?|el|la|al?)\s+)?(?:secretari[ao]|bot|asistente)\s+"
     r"(?:para\s+|a\s+|de\s+|al?\s+)?(?P<name>\w+)",
     re.IGNORECASE,
 )
