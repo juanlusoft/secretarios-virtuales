@@ -40,11 +40,8 @@ async def main(employee_id_str: str) -> None:
     employee_name = row["name"]
     telegram_chat_id = row["telegram_chat_id"]
 
-    raw_conn = await asyncpg.connect(app_dsn)
-    await raw_conn.execute(
-        "SELECT set_config('app.current_employee_id', $1, true)",
-        str(employee_id),
-    )
+    admin_dsn = os.environ["DATABASE_URL"]
+    raw_conn = await asyncpg.connect(admin_dsn)
     enc_token = await raw_conn.fetchval(
         (
             "SELECT encrypted FROM credentials "
