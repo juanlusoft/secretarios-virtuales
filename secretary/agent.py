@@ -1,3 +1,4 @@
+import json
 import logging
 from pathlib import Path
 from uuid import UUID
@@ -53,6 +54,7 @@ class SecretaryAgent:
         self._documents_dir = documents_dir
         self._store = CredentialStore(fernet_key)
         self._redis_url = redis_url
+        self._profile: dict | None = None
 
     async def _is_authorized(self, update: Update) -> bool:
         return str(update.effective_chat.id) == self._allowed_chat_id  # type: ignore[union-attr]
@@ -64,7 +66,6 @@ class SecretaryAgent:
             enc_smtp = await repo.get_credential("email_smtp")
         if not enc_imap or not enc_smtp:
             return None
-        import json
         imap = json.loads(self._store.decrypt(enc_imap))
         smtp = json.loads(self._store.decrypt(enc_smtp))
         return EmailClient(
@@ -77,6 +78,26 @@ class SecretaryAgent:
                 password=imap["password"],
             )
         )
+
+    async def _load_profile(self) -> dict | None:
+        async with self._pool.acquire() as conn:
+            repo = Repository(conn, self._employee_id)
+            encrypted = await repo.get_credential("profile")
+        if not encrypted:
+            return None
+        return json.loads(self._store.decrypt(encrypted))
+
+    async def _save_profile(self, profile: dict) -> None:
+        encrypted = self._store.encrypt(json.dumps(profile))
+        async with self._pool.acquire() as conn:
+            repo = Repository(conn, self._employee_id)
+            await repo.save_credential("profile", encrypted)
+
+    async def _save_email_credentials(self, imap_json: str, smtp_json: str) -> None:
+        async with self._pool.acquire() as conn:
+            repo = Repository(conn, self._employee_id)
+            await repo.save_credential("email_imap", self._store.encrypt(imap_json))
+            await repo.save_credential("email_smtp", self._store.encrypt(smtp_json))
 
     async def _handle_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._is_authorized(update):
@@ -184,7 +205,6 @@ class SecretaryAgent:
         async for message in pubsub.listen():
             if message["type"] != "message":
                 continue
-            import json
             data = json.loads(message["data"])
             if data.get("type") == "admin_message":
                 await app.bot.send_message(
