@@ -1,4 +1,5 @@
 import email as email_lib
+from datetime import datetime, timedelta
 from email.mime.text import MIMEText
 
 import aioimaplib
@@ -26,7 +27,7 @@ class EmailClient:
             start_tls=True,
         )
 
-    async def fetch_inbox(self, limit: int = 10) -> list[EmailMessage]:
+    async def fetch_inbox(self, limit: int = 10, since_days: int = 2) -> list[EmailMessage]:
         messages: list[EmailMessage] = []
         imap = aioimaplib.IMAP4_SSL(
             host=self._config.imap_host, port=self._config.imap_port
@@ -37,7 +38,8 @@ class EmailClient:
             if status != "OK":
                 raise ValueError(f"IMAP login failed: {data}")
             await imap.select("INBOX")
-            _, data = await imap.search("ALL")
+            since_date = (datetime.now() - timedelta(days=since_days)).strftime("%d-%b-%Y")
+            _, data = await imap.search(f"SINCE {since_date}")
             # aioimaplib may return ints, bytes or strings depending on version
             raw_uids = data[0] if data else b""
             if isinstance(raw_uids, (bytes, bytearray)):
