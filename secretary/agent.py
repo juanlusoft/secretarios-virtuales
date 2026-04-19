@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 from contextlib import suppress
 from pathlib import Path
@@ -17,6 +18,7 @@ from secretary.handlers.audio import handle_audio
 from secretary.handlers.config_email import EmailConfigFlow
 from secretary.handlers.document import handle_document
 from secretary.handlers.email import handle_check_email
+from secretary.handlers.onboarding import build_onboarding_handler
 from secretary.handlers.photo import handle_photo
 from secretary.handlers.text import handle_text
 from secretary.memory import MemoryManager
@@ -58,6 +60,7 @@ class SecretaryAgent:
         self._redis_url = redis_url
         self._config_email = EmailConfigFlow(employee_id, db_pool, self._store)
         self._email_configured: bool | None = None  # lazily checked, invalidated on save
+        self._profile: dict | None = None  # lazily loaded from credentials table
 
     async def _is_authorized(self, update: Update) -> bool:
         return str(update.effective_chat.id) == self._allowed_chat_id  # type: ignore[union-attr]
@@ -69,7 +72,6 @@ class SecretaryAgent:
             enc_smtp = await repo.get_credential("email_smtp")
         if not enc_imap or not enc_smtp:
             return None
-        import json
         imap = json.loads(self._store.decrypt(enc_imap))
         smtp = json.loads(self._store.decrypt(enc_smtp))
         return EmailClient(
@@ -89,6 +91,32 @@ class SecretaryAgent:
                 repo = Repository(conn, self._employee_id)
                 self._email_configured = await repo.get_credential("email_imap") is not None
         return self._email_configured
+
+    async def _load_profile(self) -> dict | None:
+        async with self._pool.acquire() as conn:
+            repo = Repository(conn, self._employee_id)
+            raw = await repo.get_credential("profile")
+        if raw is None:
+            return None
+        try:
+            return json.loads(self._store.decrypt(raw))  # type: ignore[no-any-return]
+        except Exception:
+            return None
+
+    async def _save_profile(self, profile: dict) -> None:
+        encrypted = self._store.encrypt(json.dumps(profile))
+        async with self._pool.acquire() as conn:
+            repo = Repository(conn, self._employee_id)
+            await repo.save_credential("profile", encrypted)
+
+    async def _save_email_credentials(self, imap_json: str, smtp_json: str) -> None:
+        enc_imap = self._store.encrypt(imap_json)
+        enc_smtp = self._store.encrypt(smtp_json)
+        async with self._pool.acquire() as conn:
+            repo = Repository(conn, self._employee_id)
+            await repo.save_credential("email_imap", enc_imap)
+            await repo.save_credential("email_smtp", enc_smtp)
+        self._email_configured = True
 
     async def _handle_text(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         if not await self._is_authorized(update):
@@ -129,6 +157,8 @@ class SecretaryAgent:
             return
 
         email_configured = await self._check_email_configured()
+        if self._profile is None:
+            self._profile = await self._load_profile()
         async with self._pool.acquire() as conn:
             repo = Repository(conn, self._employee_id)
             memory = MemoryManager(repo=repo, embed_client=self._embed)
@@ -138,6 +168,7 @@ class SecretaryAgent:
                 memory=memory,
                 chat=self._chat,
                 email_configured=email_configured,
+                profile=self._profile,
             )
             await memory.save_turn(msg, response)
         await update.message.reply_text(response)  # type: ignore[union-attr]
@@ -243,6 +274,7 @@ class SecretaryAgent:
 
     async def run(self, bot_token: str) -> None:
         app = Application.builder().token(bot_token).build()
+        app.add_handler(build_onboarding_handler(self))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self._handle_text))
         app.add_handler(MessageHandler(filters.COMMAND, self._handle_text))
         app.add_handler(MessageHandler(filters.VOICE, self._handle_voice))
