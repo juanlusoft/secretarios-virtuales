@@ -280,6 +280,45 @@ class SecretaryAgent:
                 await asyncio.sleep(retry_delay)
                 retry_delay = min(retry_delay * 2, 60.0)
 
+    async def _poll_email(self, app: Application, interval: int = 600) -> None:  # type: ignore[type-arg]
+        await asyncio.sleep(interval)  # wait before first check
+        while True:
+            try:
+                email_client = await self._get_email_client()
+                if email_client:
+                    messages = await asyncio.wait_for(
+                        email_client.fetch_inbox(limit=20, since_days=1),
+                        timeout=30.0,
+                    )
+                    # Load seen UIDs
+                    async with self._pool.acquire() as conn:
+                        repo = Repository(conn, self._employee_id)
+                        raw = await repo.get_credential("email_seen_uids")
+                    seen: set[str] = set(json.loads(self._store.decrypt(raw)) if raw else [])
+
+                    new_messages = [m for m in messages if str(m.uid) not in seen]
+                    if new_messages:
+                        lines = []
+                        for m in new_messages:
+                            lines.append(f"📧 *{m.sender}*\n_{m.subject}_")
+                            seen.add(str(m.uid))
+                        text = f"📬 Tienes {len(new_messages)} email(s) nuevo(s):\n\n" + "\n\n".join(lines)
+                        await app.bot.send_message(
+                            chat_id=self._allowed_chat_id,
+                            text=text,
+                            parse_mode="Markdown",
+                        )
+                        # Save updated seen UIDs
+                        encrypted = self._store.encrypt(json.dumps(list(seen)))
+                        async with self._pool.acquire() as conn:
+                            repo = Repository(conn, self._employee_id)
+                            await repo.save_credential("email_seen_uids", encrypted)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                logger.exception("Email poller error")
+            await asyncio.sleep(interval)
+
     async def run(self, bot_token: str) -> None:
         app = Application.builder().token(bot_token).build()
         app.add_handler(build_onboarding_handler(self))
@@ -299,9 +338,13 @@ class SecretaryAgent:
             await app.start()
             await app.updater.start_polling(drop_pending_updates=True)
             redis_task = asyncio.create_task(self._listen_redis(app))
+            email_task = asyncio.create_task(self._poll_email(app, interval=600))
             try:
                 await asyncio.Event().wait()
             finally:
                 redis_task.cancel()
+                email_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await redis_task
+                with suppress(asyncio.CancelledError):
+                    await email_task
