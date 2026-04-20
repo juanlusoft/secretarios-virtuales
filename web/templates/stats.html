@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="stats-grid">
+  <div class="stat-card" style="border-left:3px solid #7c3aed">
+    <div class="stat-label">Secretarios total</div>
+    <div class="stat-value">{{ stats.secretaries_total }}</div>
+    <div class="stat-sub" style="color:#10b981">{{ stats.secretaries_active }} activos</div>
+  </div>
+  <div class="stat-card" style="border-left:3px solid #06b6d4">
+    <div class="stat-label">Msgs hoy</div>
+    <div class="stat-value">{{ stats.msgs_today }}</div>
+    <div class="stat-sub" style="color:#64748b">conteo total, sin contenido</div>
+  </div>
+  <div class="stat-card" style="border-left:3px solid #10b981">
+    <div class="stat-label">Docs compartidos</div>
+    <div class="stat-value">{{ stats.shared_docs }}</div>
+    <div class="stat-sub" style="color:#64748b">vault/shared</div>
+  </div>
+  <div class="stat-card" style="border-left:3px solid #f59e0b">
+    <div class="stat-label">Notas vault total</div>
+    <div class="stat-value">{{ stats.vault_notes }}</div>
+    <div class="stat-sub" style="color:#64748b">Obsidian sync</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header">
+    <span class="card-title">Actividad por secretario (msgs hoy)</span>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Secretario</th>
+        <th>Estado</th>
+        <th>Msgs hoy</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in secretaries %}
+      <tr>
+        <td style="color:#e2e8f0">{{ s.name }}</td>
+        <td>
+          {% if s.is_active %}
+            <span class="badge-active">● activo</span>
+          {% else %}
+            <span class="badge-inactive">● inactivo</span>
+          {% endif %}
+        </td>
+        <td class="msg-count">{{ s.msgs_today if s.is_active else "—" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}
