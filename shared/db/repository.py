@@ -170,3 +170,86 @@ class Repository:
             f"{prefix}%",
         )
         return [(r["service_type"], r["encrypted"]) for r in rows]
+
+    async def get_vault_note_mtimes(self, source: str) -> dict[str, "datetime"]:
+        from datetime import datetime
+        rows = await self._conn.fetch(
+            """
+            SELECT vault_path, modified_at FROM vault_notes
+            WHERE employee_id = $1 AND source = $2
+            """,
+            self._employee_id, source,
+        )
+        return {r["vault_path"]: r["modified_at"] for r in rows}
+
+    async def upsert_vault_note(
+        self,
+        source: str,
+        vault_path: str,
+        title: str | None,
+        tags: list[str],
+        content_text: str,
+        embedding: list[float],
+        modified_at: "datetime",
+    ) -> None:
+        vec_str = "[" + ",".join(str(x) for x in embedding) + "]"
+        await self._conn.execute(
+            """
+            INSERT INTO vault_notes
+                (employee_id, source, vault_path, title, tags, content_text, embedding, modified_at)
+            VALUES ($1, $2, $3, $4, $5, $6, $7::vector, $8)
+            ON CONFLICT (employee_id, source, vault_path)
+            DO UPDATE SET
+                title = EXCLUDED.title,
+                tags = EXCLUDED.tags,
+                content_text = EXCLUDED.content_text,
+                embedding = EXCLUDED.embedding,
+                modified_at = EXCLUDED.modified_at,
+                indexed_at = NOW()
+            WHERE vault_notes.modified_at < EXCLUDED.modified_at
+            """,
+            self._employee_id, source, vault_path, title, tags,
+            content_text, vec_str, modified_at,
+        )
+
+    async def delete_vault_notes_not_in(
+        self, source: str, vault_paths: list[str]
+    ) -> None:
+        await self._conn.execute(
+            """
+            DELETE FROM vault_notes
+            WHERE employee_id = $1 AND source = $2
+              AND NOT (vault_path = ANY($3))
+            """,
+            self._employee_id, source, vault_paths,
+        )
+
+    async def search_vault_notes(
+        self, embedding: list[float], limit: int = 3
+    ) -> list["VaultNote"]:
+        from shared.db.models import VaultNote
+        vec_str = "[" + ",".join(str(x) for x in embedding) + "]"
+        rows = await self._conn.fetch(
+            """
+            SELECT id, employee_id, source, vault_path, title, tags,
+                   content_text, modified_at, indexed_at
+            FROM vault_notes
+            ORDER BY embedding <=> $1::vector
+            LIMIT $2
+            """,
+            vec_str, limit,
+        )
+        return [
+            VaultNote(
+                id=r["id"],
+                employee_id=r["employee_id"],
+                source=r["source"],
+                vault_path=r["vault_path"],
+                title=r["title"],
+                tags=list(r["tags"] or []),
+                content_text=r["content_text"],
+                modified_at=r["modified_at"],
+                indexed_at=r["indexed_at"],
+            )
+            for r in rows
+        ]
