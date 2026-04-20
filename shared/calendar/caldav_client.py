@@ -98,15 +98,25 @@ class CalDAVClient:
                     if "title" in fields:
                         vevent.summary.value = fields["title"]
                     if "start_iso" in fields:
-                        vevent.dtstart.value = datetime.fromisoformat(fields["start_iso"])
+                        dt = datetime.fromisoformat(fields["start_iso"])
+                        if dt.tzinfo is None:
+                            dt = dt.replace(tzinfo=timezone.utc)
+                        vevent.dtstart.value = dt
                     if "end_iso" in fields:
-                        vevent.dtend.value = datetime.fromisoformat(fields["end_iso"])
+                        dt = datetime.fromisoformat(fields["end_iso"])
+                        if dt.tzinfo is None:
+                            dt = dt.replace(tzinfo=timezone.utc)
+                        vevent.dtend.value = dt
                     if "description" in fields:
                         if hasattr(vevent, "description"):
                             vevent.description.value = fields["description"]
+                        else:
+                            vevent.add("description", fields["description"])
                     if "location" in fields:
                         if hasattr(vevent, "location"):
                             vevent.location.value = fields["location"]
+                        else:
+                            vevent.add("location", fields["location"])
                     raw.save()
                     return self._parse_event(raw)
             raise ValueError(f"Event {event_id} not found")
