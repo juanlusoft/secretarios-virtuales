@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 import os
+from pathlib import Path
 
 import asyncpg
 from fastapi import FastAPI
@@ -9,9 +10,6 @@ from fastapi.templating import Jinja2Templates
 from web.db import create_admin_pool
 from web.service import WebAdminService
 from web.routes import secretaries, messages, stats, documents
-
-_pool: asyncpg.Pool | None = None
-_service: WebAdminService | None = None
 
 
 @asynccontextmanager
@@ -31,7 +29,7 @@ async def lifespan(app: FastAPI):
 
     app.state.service = service
     app.state.templates = Jinja2Templates(
-        directory=str(__import__("pathlib").Path(__file__).parent / "templates")
+        directory=str(Path(__file__).parent / "templates")
     )
 
     yield
@@ -43,8 +41,9 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     app = FastAPI(title="SV Admin", lifespan=lifespan)
 
-    static_dir = str(__import__("pathlib").Path(__file__).parent / "static")
-    app.mount("/static", StaticFiles(directory=static_dir), name="static")
+    static_dir = Path(__file__).parent / "static"
+    if static_dir.exists():
+        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
     app.include_router(secretaries.router)
     app.include_router(messages.router)
