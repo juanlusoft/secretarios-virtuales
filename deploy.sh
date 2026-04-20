@@ -22,6 +22,11 @@ echo ""
 echo "==> Instalando dependencias..."
 "$PIP" install -e ".[dev]" -q
 
+# 2b. Run database migrations
+echo ""
+echo "==> Ejecutando migraciones de base de datos..."
+"$PYTHON" -m shared.db.migrate
+
 # 3. Write systemd services with correct paths
 echo ""
 echo "==> Configurando servicios systemd..."
