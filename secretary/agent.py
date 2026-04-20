@@ -15,7 +15,9 @@ from telegram.ext import (
 )
 
 from secretary.handlers.audio import handle_audio
+from secretary.handlers.config_calendar import CalendarConfigFlow
 from secretary.handlers.config_email import EmailConfigFlow
+from shared.calendar.client import CalendarClient, make_calendar_client
 from secretary.handlers.document import handle_document
 from secretary.handlers.email import handle_check_email
 from secretary.handlers.onboarding import build_onboarding_handler
@@ -53,6 +55,9 @@ class SecretaryAgent:
         redis_url: str,
         vision: ChatClient | None = None,
         executor: ToolExecutor | None = None,
+        calendar_client: CalendarClient | None = None,
+        google_client_id: str = "",
+        google_client_secret: str = "",
     ) -> None:
         self._employee_id = employee_id
         self._employee_name = employee_name
@@ -72,6 +77,14 @@ class SecretaryAgent:
         self._email_configured: bool | None = None  # lazily checked, invalidated on save
         self._profile: dict | None = None  # lazily loaded from credentials table
         self._executor = executor
+        self._calendar = calendar_client
+        self._config_calendar = CalendarConfigFlow(
+            employee_id=employee_id,
+            pool=db_pool,
+            store=self._store,
+            google_client_id=google_client_id,
+            google_client_secret=google_client_secret,
+        )
         self._superuser_until: datetime | None = None
         self._pending_tool: ToolCall | None = None
         self._pending_messages: list[dict] | None = None
@@ -211,6 +224,27 @@ class SecretaryAgent:
             await update.message.reply_text(reply, parse_mode="Markdown")  # type: ignore[union-attr]
             return
 
+        if self._config_calendar.active:
+            reply, saved = await self._config_calendar.handle(msg)
+            if saved:
+                # Reload calendar client from fresh credentials
+                async with self._pool.acquire() as conn:
+                    repo = Repository(conn, self._employee_id)
+                    enc_provider = await repo.get_credential("calendar_provider")
+                    if enc_provider:
+                        provider = self._store.decrypt(enc_provider)
+                        if provider == "google":
+                            enc = await repo.get_credential("calendar_google_token")
+                            creds = json.loads(self._store.decrypt(enc))
+                        else:
+                            enc = await repo.get_credential("calendar_caldav")
+                            creds = json.loads(self._store.decrypt(enc))
+                        self._calendar = make_calendar_client(provider, creds)
+                        if self._executor is not None:
+                            self._executor._calendar = self._calendar
+            await update.message.reply_text(reply, parse_mode="Markdown")  # type: ignore[union-attr]
+            return
+
         # Superuser activation
         if msg == "/superuser":
             self._superuser_until = datetime.now() + timedelta(minutes=30)
@@ -283,6 +317,29 @@ class SecretaryAgent:
             await update.message.reply_text(reply, parse_mode="Markdown")  # type: ignore[union-attr]
             return
 
+        if msg.lower() == "/config_calendar":
+            reply = self._config_calendar.start()
+            await update.message.reply_text(reply, parse_mode="Markdown")  # type: ignore[union-attr]
+            return
+
+        if msg.lower() in ("/calendario", "/calendar"):
+            if self._calendar is None:
+                await update.message.reply_text(  # type: ignore[union-attr]
+                    "Calendario no configurado. Usa /config_calendar para configurarlo."
+                )
+                return
+            events = await self._calendar.list_events(days_ahead=7)
+            if not events:
+                await update.message.reply_text("📅 No tienes eventos en los próximos 7 días.")  # type: ignore[union-attr]
+                return
+            lines = ["📅 *Próximos eventos:*"]
+            for e in events:
+                lines.append(f"• *{e.title}* — {e.start.strftime('%d/%m %H:%M')}")
+                if e.location:
+                    lines.append(f"  📍 {e.location}")
+            await update.message.reply_text("\n".join(lines), parse_mode="Markdown")  # type: ignore[union-attr]
+            return
+
         if msg.lower().startswith("/email"):
             email_client = await self._get_email_client()
             if not email_client:
@@ -316,7 +373,8 @@ class SecretaryAgent:
             self._profile = await self._load_profile()
 
         if self._executor is not None:
-            system = _build_tool_system(self._employee_name, self._profile)
+            cal_context = await _build_calendar_context(self._calendar)
+            system = _build_tool_system(self._employee_name, self._profile, cal_context)
             self._pending_original_msg = msg
             response = await self._run_tool_loop(
                 messages=[{"role": "user", "content": msg}],
@@ -519,15 +577,36 @@ class SecretaryAgent:
                     await email_task
 
 
-def _build_tool_system(employee_name: str, profile: dict | None) -> str:
+def _build_tool_system(employee_name: str, profile: dict | None, cal_context: str = "") -> str:
+    from datetime import datetime as _dt
     bot_name = (profile or {}).get("bot_name") or employee_name
     preferred_name = (profile or {}).get("preferred_name") or employee_name
     language = (profile or {}).get("language") or "español"
     tool_names = ", ".join(t["function"]["name"] for t in TOOL_DEFINITIONS)
-    return (
+    now_str = _dt.now().strftime("%A %d/%m/%Y %H:%M")
+    base = (
         f"Eres {bot_name}, asistente técnico personal de {preferred_name}. "
         f"Responde en {language}. "
         f"Tienes acceso a herramientas de sistema: {tool_names}. "
         "Úsalas para completar las tareas. Ejecuta en silencio y da un resumen al final. "
         "NUNCA uses chino ni muestres razonamiento interno."
+        f"\n\nFecha y hora actual: {now_str}"
     )
+    if cal_context:
+        base = f"{base}\n\n{cal_context}"
+    return base
+
+
+async def _build_calendar_context(calendar: CalendarClient | None) -> str:
+    if calendar is None:
+        return ""
+    try:
+        events = await calendar.list_events(days_ahead=3)
+        if not events:
+            return ""
+        lines = ["Próximos eventos (3 días):"]
+        for e in events[:3]:
+            lines.append(f"- {e.title} ({e.start.strftime('%d/%m/%Y %H:%M')})")
+        return "\n".join(lines)
+    except Exception:
+        return ""

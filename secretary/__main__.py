@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import os
 import sys
@@ -73,13 +74,53 @@ async def main(employee_id_str: str) -> None:
     await raw_conn2.close()
     tools_enabled = tools_enc is not None and store.decrypt(tools_enc) == "true"
 
+    raw_conn3 = await asyncpg.connect(app_dsn)
+    async with raw_conn3.transaction():
+        await raw_conn3.execute(
+            "SELECT set_config('app.current_employee_id', $1, true)",
+            str(employee_id),
+        )
+        calendar_provider_enc = await raw_conn3.fetchval(
+            "SELECT encrypted FROM credentials WHERE employee_id=$1 AND service_type='calendar_provider'",
+            employee_id,
+        )
+    await raw_conn3.close()
+
+    calendar_client = None
+    if calendar_provider_enc is not None:
+        from shared.calendar.client import make_calendar_client
+        provider = store.decrypt(calendar_provider_enc)
+        raw_conn4 = await asyncpg.connect(app_dsn)
+        async with raw_conn4.transaction():
+            await raw_conn4.execute(
+                "SELECT set_config('app.current_employee_id', $1, true)",
+                str(employee_id),
+            )
+            if provider == "google":
+                token_enc = await raw_conn4.fetchval(
+                    "SELECT encrypted FROM credentials WHERE employee_id=$1 AND service_type='calendar_google_token'",
+                    employee_id,
+                )
+                creds = json.loads(store.decrypt(token_enc))
+            else:
+                caldav_enc = await raw_conn4.fetchval(
+                    "SELECT encrypted FROM credentials WHERE employee_id=$1 AND service_type='calendar_caldav'",
+                    employee_id,
+                )
+                creds = json.loads(store.decrypt(caldav_enc))
+        await raw_conn4.close()
+        try:
+            calendar_client = make_calendar_client(provider, creds)
+        except Exception as e:
+            logging.warning("Failed to create calendar client: %s", e)
+
     pool = DatabasePool(app_dsn, employee_id)
     await pool.connect()
 
     executor: ToolExecutor | None = None
     if tools_enabled:
         ssh_store = SSHStore(pool=pool, employee_id=employee_id, store=store)
-        executor = ToolExecutor(ssh_store=ssh_store)
+        executor = ToolExecutor(ssh_store=ssh_store, calendar_client=calendar_client)
 
     agent = SecretaryAgent(
         employee_id=employee_id,
@@ -101,6 +142,9 @@ async def main(employee_id_str: str) -> None:
         fernet_key=fernet_key,
         redis_url=os.environ["REDIS_URL"],
         executor=executor,
+        calendar_client=calendar_client,
+        google_client_id=os.environ.get("GOOGLE_CALENDAR_CLIENT_ID", ""),
+        google_client_secret=os.environ.get("GOOGLE_CALENDAR_CLIENT_SECRET", ""),
     )
 
     await agent.run(bot_token)
