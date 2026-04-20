@@ -1,0 +1,15 @@
+[Unit]
+Description=Obsidian Vault Sync — secretarios-virtuales
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=secretarios
+WorkingDirectory=/opt/secretarios-virtuales
+EnvironmentFile=/opt/secretarios-virtuales/.env
+ExecStart=/opt/secretarios-virtuales/.venv/bin/python -m shared.vault.cron
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target
