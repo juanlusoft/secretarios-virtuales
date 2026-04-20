@@ -50,3 +50,16 @@ class Task:
     description: str | None
     status: str
     created_at: datetime
+
+
+@dataclass
+class VaultNote:
+    id: UUID
+    employee_id: UUID
+    source: str
+    vault_path: str
+    title: str | None
+    tags: list[str]
+    content_text: str | None
+    modified_at: datetime
+    indexed_at: datetime
