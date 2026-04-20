@@ -1,0 +1,15 @@
+[Unit]
+Description=SV Calendar Reminder
+After=network.target
+
+[Service]
+Type=simple
+User=juanlu
+WorkingDirectory=/home/juanlu/secretarios-virtuales
+EnvironmentFile=/home/juanlu/secretarios-virtuales/.env
+ExecStart=/home/juanlu/secretarios-virtuales/.venv/bin/python -m shared.calendar.remind
+Restart=always
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

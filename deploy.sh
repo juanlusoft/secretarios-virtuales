@@ -55,6 +55,7 @@ EOF
 
 write_service "web-admin"      "SV Web Admin Panel"   "-m web"               "on-failure" "5"
 write_service "obsidian-sync"  "SV Obsidian Sync"     "-m shared.vault.cron" "always"     "30"
+write_service "calendar-remind" "SV Calendar Reminder" "-m shared.calendar.remind" "always" "30"
 
 # 4. Setup Obsidian vaults directory
 echo ""
@@ -76,7 +77,7 @@ echo ""
 echo "==> Recargando systemd..."
 sudo systemctl daemon-reload
 
-for svc in web-admin obsidian-sync; do
+for svc in web-admin obsidian-sync calendar-remind; do
     echo "==> Activando $svc..."
     sudo systemctl enable "$svc" 2>/dev/null || true
     sudo systemctl restart "$svc"
@@ -85,7 +86,7 @@ done
 # 5. Status
 echo ""
 echo "==> Estado de los servicios:"
-sudo systemctl status web-admin obsidian-sync --no-pager -l | grep -E "(Active|Main PID|error|Error|ModuleNot)" || true
+sudo systemctl status web-admin obsidian-sync calendar-remind --no-pager -l | grep -E "(Active|Main PID|error|Error|ModuleNot)" || true
 
 echo ""
 echo "✓ Despliegue completado."
