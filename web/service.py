@@ -5,6 +5,8 @@ from dataclasses import dataclass
 
 import asyncpg
 
+_CHANNEL_LIFECYCLE = "secretary.lifecycle"
+
 
 @dataclass
 class StatsRow:
@@ -25,6 +27,12 @@ class SecretaryRow:
 
 
 class WebAdminService:
+    """Admin service for cross-employee queries.
+
+    IMPORTANT: This service must use a SUPERUSER database connection
+    to bypass Row Level Security policies. Never use svapp role credentials.
+    """
+
     def __init__(self, pool: asyncpg.Pool, redis, credential_store) -> None:
         self._pool = pool
         self._redis = redis
@@ -89,27 +97,28 @@ class WebAdminService:
         tools_enabled: bool = False,
     ) -> str:
         async with self._pool.acquire() as conn:
-            emp_id = await conn.fetchval(
-                "INSERT INTO employees (name, telegram_chat_id) VALUES ($1, $2) RETURNING id::text",
-                name,
-                chat_id,
-            )
-            encrypted_token = self._store.encrypt(token)
-            await conn.execute(
-                "INSERT INTO credentials (employee_id, service_type, encrypted) VALUES ($1, $2, $3)",
-                emp_id,
-                "telegram_token",
-                encrypted_token,
-            )
-            if tools_enabled:
+            async with conn.transaction():
+                emp_id = await conn.fetchval(
+                    "INSERT INTO employees (name, telegram_chat_id) VALUES ($1, $2) RETURNING id::text",
+                    name,
+                    chat_id,
+                )
+                encrypted_token = self._store.encrypt(token)
                 await conn.execute(
                     "INSERT INTO credentials (employee_id, service_type, encrypted) VALUES ($1, $2, $3)",
                     emp_id,
-                    "tools_enabled",
-                    self._store.encrypt("true"),
+                    "telegram_token",
+                    encrypted_token,
                 )
+                if tools_enabled:
+                    await conn.execute(
+                        "INSERT INTO credentials (employee_id, service_type, encrypted) VALUES ($1, $2, $3)",
+                        emp_id,
+                        "tools_enabled",
+                        self._store.encrypt("true"),
+                    )
         await self._redis.publish(
-            "secretary.lifecycle",
+            _CHANNEL_LIFECYCLE,
             json.dumps({"event": "created", "employee_id": str(emp_id)}),
         )
         return str(emp_id)
@@ -121,7 +130,7 @@ class WebAdminService:
                 employee_id,
             )
         await self._redis.publish(
-            "secretary.lifecycle",
+            _CHANNEL_LIFECYCLE,
             json.dumps({"event": "destroyed", "employee_id": employee_id}),
         )
 

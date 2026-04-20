@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 from datetime import date
+from contextlib import asynccontextmanager
 
 from web.service import WebAdminService, SecretaryRow, StatsRow
 
@@ -12,6 +13,13 @@ def mock_pool():
     conn = AsyncMock()
     pool.acquire.return_value.__aenter__ = AsyncMock(return_value=conn)
     pool.acquire.return_value.__aexit__ = AsyncMock(return_value=None)
+
+    # Mock the transaction context manager
+    @asynccontextmanager
+    async def mock_transaction():
+        yield
+
+    conn.transaction = MagicMock(return_value=mock_transaction())
     return pool, conn
 
 
