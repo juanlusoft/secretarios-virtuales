@@ -56,7 +56,22 @@ EOF
 write_service "web-admin"      "SV Web Admin Panel"   "-m web"               "on-failure" "5"
 write_service "obsidian-sync"  "SV Obsidian Sync"     "-m shared.vault.cron" "always"     "30"
 
-# 4. Reload and restart
+# 4. Setup Obsidian vaults directory
+echo ""
+echo "==> Configurando vaults de Obsidian..."
+VAULTS_DIR="$HOME/vaults"
+mkdir -p "$VAULTS_DIR/shared"
+echo "    Vaults: $VAULTS_DIR"
+
+ENV_FILE="$PROJECT_DIR/.env"
+if ! grep -q "OBSIDIAN_VAULTS_DIR" "$ENV_FILE" 2>/dev/null; then
+    echo "OBSIDIAN_VAULTS_DIR=$VAULTS_DIR" >> "$ENV_FILE"
+    echo "    Añadido OBSIDIAN_VAULTS_DIR al .env"
+else
+    echo "    OBSIDIAN_VAULTS_DIR ya está en .env"
+fi
+
+# 5. Reload and restart
 echo ""
 echo "==> Recargando systemd..."
 sudo systemctl daemon-reload
