@@ -22,10 +22,12 @@ def test_calendar_event_optional_fields():
     assert event.location == "Oficina"
 
 
-def test_format_reminder():
+def test_event_start_end_stored_correctly():
     from datetime import timedelta
     now = datetime.now(tz=timezone.utc)
     start = now + timedelta(minutes=45)
-    event = CalendarEvent(id="x", title="Demo", start=start, end=start + timedelta(hours=1))
-    minutes_until = int((start - now).total_seconds() / 60)
-    assert 44 <= minutes_until <= 46
+    end = start + timedelta(hours=1)
+    event = CalendarEvent(id="x", title="Demo", start=start, end=end)
+    assert event.start == start
+    assert event.end == end
+    assert (event.end - event.start).total_seconds() == 3600
