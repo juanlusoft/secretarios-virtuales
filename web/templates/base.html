@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SV Admin</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
+</head>
+<body>
+
+<nav class="sidebar">
+  <div class="sidebar-logo">⚡ SV Admin</div>
+  <a href="/secretaries" class="sidebar-link {% if active == 'secretaries' %}active{% endif %}">👥 Secretarios</a>
+  <a href="/messages" class="sidebar-link {% if active == 'messages' %}active{% endif %}">💬 Mensajes</a>
+  <a href="/documents" class="sidebar-link {% if active == 'documents' %}active{% endif %}">📄 Documentos</a>
+  <a href="/stats" class="sidebar-link {% if active == 'stats' %}active{% endif %}">📊 Estadísticas</a>
+  <div class="sidebar-spacer"></div>
+  <div class="sidebar-version">v0.1 · sin auth</div>
+</nav>
+
+<main class="main">
+  {% block content %}{% endblock %}
+</main>
+
+</body>
+</html>
