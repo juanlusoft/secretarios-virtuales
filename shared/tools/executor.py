@@ -9,6 +9,7 @@ from shared.tools.ssh_store import SSHStore
 
 if TYPE_CHECKING:
     from shared.calendar.client import CalendarClient
+    from shared.email.client import EmailClient
 
 _MAX_OUTPUT = 4000
 _MAX_FILE = 8000
@@ -17,11 +18,13 @@ _MAX_FILE = 8000
 class ToolExecutor:
     def __init__(
         self,
-        ssh_store: SSHStore,
+        ssh_store: SSHStore | None = None,
         calendar_client: CalendarClient | None = None,
+        email_client: EmailClient | None = None,
     ) -> None:
         self._ssh = ssh_store
         self._calendar = calendar_client
+        self._email = email_client
 
     async def run(self, name: str, args: dict) -> str:
         try:
@@ -47,6 +50,10 @@ class ToolExecutor:
                 return await self._calendar_modify(args)
             if name == "calendar_cancel":
                 return await self._calendar_cancel(args)
+            if name == "email_send":
+                return await self._email_send(args)
+            if name == "email_read":
+                return await self._email_read(args)
             return f"Herramienta desconocida: {name}"
         except KeyError as e:
             return f"Error: falta el parámetro {e}"
@@ -54,6 +61,8 @@ class ToolExecutor:
             return f"Error ejecutando {name}: {e}"
 
     async def _bash(self, command: str) -> str:
+        if self._ssh is None:
+            return "Herramienta bash no disponible."
         try:
             proc = await asyncio.create_subprocess_shell(
                 command,
@@ -69,6 +78,8 @@ class ToolExecutor:
         return out or "(sin salida)"
 
     async def _ssh_exec(self, name: str, command: str) -> str:
+        if self._ssh is None:
+            return "Herramienta SSH no disponible."
         import asyncssh
         data = await self._ssh.load(name)
         connect_kwargs: dict = {
@@ -89,6 +100,8 @@ class ToolExecutor:
         return out or "(sin salida)"
 
     async def _ssh_save(self, args: dict) -> str:
+        if self._ssh is None:
+            return "Herramienta SSH no disponible."
         await self._ssh.save(
             name=args["name"],
             host=args["host"],
@@ -100,6 +113,8 @@ class ToolExecutor:
         return f"✅ Conexión '{args['name']}' ({args['host']}) guardada."
 
     async def _ssh_list(self) -> str:
+        if self._ssh is None:
+            return "Herramienta SSH no disponible."
         connections = await self._ssh.list_all()
         if not connections:
             return "No hay conexiones SSH guardadas."
@@ -186,3 +201,21 @@ class ToolExecutor:
         event_id = args["event_id"]
         await self._calendar.cancel_event(event_id)
         return f"✅ Evento {event_id} cancelado."
+
+    async def _email_send(self, args: dict) -> str:
+        if self._email is None:
+            return "Email no configurado. Usa /config_email para activarlo."
+        await self._email.send(to=args["to"], subject=args["subject"], body=args["body"])
+        return f"✅ Email enviado a {args['to']}."
+
+    async def _email_read(self, args: dict) -> str:
+        if self._email is None:
+            return "Email no configurado. Usa /config_email para activarlo."
+        limit = int(args.get("limit", 5))
+        messages = await self._email.fetch_inbox(limit=limit)
+        if not messages:
+            return "No hay emails nuevos."
+        lines = []
+        for m in messages:
+            lines.append(f"📧 *De:* {m.sender}\n*Asunto:* {m.subject}\n{m.body[:300]}")
+        return "\n\n---\n\n".join(lines)

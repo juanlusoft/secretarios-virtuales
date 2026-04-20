@@ -18,13 +18,15 @@ class EmailClient:
         message["To"] = to
         message["Subject"] = subject
 
+        use_tls = self._config.smtp_port == 465
         await aiosmtplib.send(
             message,
             hostname=self._config.smtp_host,
             port=self._config.smtp_port,
             username=self._config.username,
             password=self._config.password,
-            start_tls=True,
+            use_tls=use_tls,
+            start_tls=not use_tls,
         )
 
     async def fetch_inbox(self, limit: int = 10, since_days: int = 2) -> list[EmailMessage]:

@@ -165,4 +165,33 @@ TOOL_DEFINITIONS: list[dict] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "email_send",
+            "description": "Envía un email a un destinatario.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "to": {"type": "string", "description": "Dirección de email del destinatario"},
+                    "subject": {"type": "string", "description": "Asunto del email"},
+                    "body": {"type": "string", "description": "Cuerpo del email en texto plano"},
+                },
+                "required": ["to", "subject", "body"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "email_read",
+            "description": "Lee los emails recientes de la bandeja de entrada.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "description": "Número máximo de emails a leer (por defecto 5)"},
+                },
+            },
+        },
+    },
 ]

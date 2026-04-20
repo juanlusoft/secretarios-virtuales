@@ -114,13 +114,56 @@ async def main(employee_id_str: str) -> None:
         except Exception as e:
             logging.warning("Failed to create calendar client: %s", e)
 
+    raw_conn5 = await asyncpg.connect(app_dsn)
+    async with raw_conn5.transaction():
+        await raw_conn5.execute(
+            "SELECT set_config('app.current_employee_id', $1, true)",
+            str(employee_id),
+        )
+        email_imap_enc = await raw_conn5.fetchval(
+            "SELECT encrypted FROM credentials WHERE employee_id=$1 AND service_type='email_imap'",
+            employee_id,
+        )
+        email_smtp_enc = await raw_conn5.fetchval(
+            "SELECT encrypted FROM credentials WHERE employee_id=$1 AND service_type='email_smtp'",
+            employee_id,
+        )
+    await raw_conn5.close()
+
+    email_client = None
+    if email_imap_enc and email_smtp_enc:
+        from shared.email.client import EmailClient
+        from shared.email.models import EmailConfig
+        imap = json.loads(store.decrypt(email_imap_enc))
+        smtp = json.loads(store.decrypt(email_smtp_enc))
+        try:
+            email_client = EmailClient(
+                EmailConfig(
+                    imap_host=imap["host"],
+                    imap_port=int(imap["port"]),
+                    smtp_host=smtp["host"],
+                    smtp_port=int(smtp["port"]),
+                    username=imap["username"],
+                    password=imap["password"],
+                )
+            )
+        except Exception as e:
+            logging.warning("Failed to create email client: %s", e)
+
     pool = DatabasePool(app_dsn, employee_id)
     await pool.connect()
 
-    executor: ToolExecutor | None = None
+    ssh_store = None
     if tools_enabled:
         ssh_store = SSHStore(pool=pool, employee_id=employee_id, store=store)
-        executor = ToolExecutor(ssh_store=ssh_store, calendar_client=calendar_client)
+
+    executor: ToolExecutor | None = None
+    if tools_enabled or email_client is not None or calendar_client is not None:
+        executor = ToolExecutor(
+            ssh_store=ssh_store,
+            calendar_client=calendar_client,
+            email_client=email_client,
+        )
 
     agent = SecretaryAgent(
         employee_id=employee_id,
