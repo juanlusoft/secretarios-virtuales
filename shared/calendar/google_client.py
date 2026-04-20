@@ -100,6 +100,14 @@ class GoogleCalendarClient:
         creds = _make_credentials(self._token_data)
         if creds.expired and creds.refresh_token:
             creds.refresh(Request())
+            self._token_data = {
+                "token": creds.token,
+                "refresh_token": creds.refresh_token,
+                "token_uri": creds.token_uri,
+                "client_id": creds.client_id,
+                "client_secret": creds.client_secret,
+                "expiry": creds.expiry.isoformat() if creds.expiry else None,
+            }
         return build("calendar", "v3", credentials=creds)
 
     async def list_events(self, days_ahead: int = 7) -> list[CalendarEvent]:
