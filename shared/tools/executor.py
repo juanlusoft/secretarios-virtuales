@@ -1,17 +1,27 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from shared.tools.ssh_store import SSHStore
+
+if TYPE_CHECKING:
+    from shared.calendar.client import CalendarClient
 
 _MAX_OUTPUT = 4000
 _MAX_FILE = 8000
 
 
 class ToolExecutor:
-    def __init__(self, ssh_store: SSHStore) -> None:
+    def __init__(
+        self,
+        ssh_store: SSHStore,
+        calendar_client: CalendarClient | None = None,
+    ) -> None:
         self._ssh = ssh_store
+        self._calendar = calendar_client
 
     async def run(self, name: str, args: dict) -> str:
         try:
@@ -29,6 +39,14 @@ class ToolExecutor:
                 return self._write_file(args["path"], args["content"])
             if name == "list_dir":
                 return self._list_dir(args["path"])
+            if name == "calendar_list":
+                return await self._calendar_list(args)
+            if name == "calendar_create":
+                return await self._calendar_create(args)
+            if name == "calendar_modify":
+                return await self._calendar_modify(args)
+            if name == "calendar_cancel":
+                return await self._calendar_cancel(args)
             return f"Herramienta desconocida: {name}"
         except KeyError as e:
             return f"Error: falta el parámetro {e}"
@@ -63,7 +81,6 @@ class ToolExecutor:
             connect_kwargs["client_keys"] = [asyncssh.import_private_key(data["ssh_key"])]
         else:
             connect_kwargs["password"] = data.get("password", "")
-
         async with asyncssh.connect(**connect_kwargs) as conn:
             result = await conn.run(command, check=False)
         out = ((result.stdout or "") + (result.stderr or "")).strip()
@@ -118,6 +135,54 @@ class ToolExecutor:
             if e.is_dir():
                 lines.append(f"📁 {e.name}/")
             else:
-                size = e.stat().st_size
-                lines.append(f"📄 {e.name} ({size} bytes)")
+                lines.append(f"📄 {e.name} ({e.stat().st_size} bytes)")
         return "\n".join(lines) if lines else "(directorio vacío)"
+
+    async def _calendar_list(self, args: dict) -> str:
+        if self._calendar is None:
+            return "Calendario no configurado. Usa /config_calendar para configurarlo."
+        days_ahead = int(args.get("days_ahead", 7))
+        events = await self._calendar.list_events(days_ahead=days_ahead)
+        if not events:
+            return f"No hay eventos en los próximos {days_ahead} días."
+        lines = []
+        for e in events:
+            local_start = e.start.strftime("%d/%m/%Y %H:%M")
+            line = f"• [{e.id}] *{e.title}* — {local_start}"
+            if e.location:
+                line += f" 📍 {e.location}"
+            lines.append(line)
+        return "\n".join(lines)
+
+    async def _calendar_create(self, args: dict) -> str:
+        if self._calendar is None:
+            return "Calendario no configurado. Usa /config_calendar para configurarlo."
+        start = datetime.fromisoformat(args["start_iso"])
+        end = datetime.fromisoformat(args["end_iso"])
+        if start.tzinfo is None:
+            start = start.replace(tzinfo=timezone.utc)
+        if end.tzinfo is None:
+            end = end.replace(tzinfo=timezone.utc)
+        event = await self._calendar.create_event(
+            title=args["title"],
+            start=start,
+            end=end,
+            description=args.get("description", ""),
+            location=args.get("location", ""),
+        )
+        return f"✅ Evento creado: *{event.title}* el {event.start.strftime('%d/%m/%Y %H:%M')} (ID: {event.id})"
+
+    async def _calendar_modify(self, args: dict) -> str:
+        if self._calendar is None:
+            return "Calendario no configurado. Usa /config_calendar para configurarlo."
+        event_id = args["event_id"]
+        fields = {k: v for k, v in args.items() if k != "event_id"}
+        event = await self._calendar.modify_event(event_id, **fields)
+        return f"✅ Evento actualizado: *{event.title}* el {event.start.strftime('%d/%m/%Y %H:%M')}"
+
+    async def _calendar_cancel(self, args: dict) -> str:
+        if self._calendar is None:
+            return "Calendario no configurado. Usa /config_calendar para configurarlo."
+        event_id = args["event_id"]
+        await self._calendar.cancel_event(event_id)
+        return f"✅ Evento {event_id} cancelado."

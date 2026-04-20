@@ -98,4 +98,71 @@ TOOL_DEFINITIONS: list[dict] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "calendar_list",
+            "description": "Lista los eventos del calendario en los próximos días.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "days_ahead": {
+                        "type": "integer",
+                        "description": "Número de días a mirar hacia adelante (por defecto 7)",
+                    },
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calendar_create",
+            "description": "Crea un nuevo evento en el calendario.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Título del evento"},
+                    "start_iso": {"type": "string", "description": "Fecha y hora de inicio en ISO 8601 con zona horaria"},
+                    "end_iso": {"type": "string", "description": "Fecha y hora de fin en ISO 8601 con zona horaria"},
+                    "description": {"type": "string", "description": "Descripción opcional del evento"},
+                    "location": {"type": "string", "description": "Lugar opcional del evento"},
+                },
+                "required": ["title", "start_iso", "end_iso"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calendar_modify",
+            "description": "Modifica un evento existente en el calendario por su ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "event_id": {"type": "string", "description": "ID del evento a modificar"},
+                    "title": {"type": "string", "description": "Nuevo título (opcional)"},
+                    "start_iso": {"type": "string", "description": "Nueva fecha/hora de inicio ISO 8601 (opcional)"},
+                    "end_iso": {"type": "string", "description": "Nueva fecha/hora de fin ISO 8601 (opcional)"},
+                    "description": {"type": "string", "description": "Nueva descripción (opcional)"},
+                    "location": {"type": "string", "description": "Nuevo lugar (opcional)"},
+                },
+                "required": ["event_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "calendar_cancel",
+            "description": "Cancela y elimina un evento del calendario por su ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "event_id": {"type": "string", "description": "ID del evento a cancelar"},
+                },
+                "required": ["event_id"],
+            },
+        },
+    },
 ]
