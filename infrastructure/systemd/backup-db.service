@@ -1,0 +1,10 @@
+[Unit]
+Description=SV — Backup PostgreSQL
+After=postgresql.service
+
+[Service]
+Type=oneshot
+User=%i
+WorkingDirectory=/opt/secretarios-virtuales
+EnvironmentFile=/opt/secretarios-virtuales/.env
+ExecStart=/opt/secretarios-virtuales/shared/backup/backup.sh

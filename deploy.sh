@@ -62,6 +62,11 @@ write_service "web-admin"      "SV Web Admin Panel"   "-m web"               "on
 write_service "obsidian-sync"  "SV Obsidian Sync"     "-m shared.vault.cron" "always"     "30"
 write_service "calendar-remind" "SV Calendar Reminder" "-m shared.calendar.remind" "always" "30"
 
+# Install backup timer (not a long-running service)
+echo "    Instalando timer de backup..."
+sudo cp "$PROJECT_DIR/infrastructure/systemd/backup-db.service" /etc/systemd/system/
+sudo cp "$PROJECT_DIR/infrastructure/systemd/backup-db.timer" /etc/systemd/system/
+
 # 4. Setup Obsidian vaults directory
 echo ""
 echo "==> Configurando vaults de Obsidian..."
@@ -81,6 +86,8 @@ fi
 echo ""
 echo "==> Recargando systemd..."
 sudo systemctl daemon-reload
+sudo systemctl enable --now backup-db.timer 2>/dev/null || true
+echo "    Timer backup-db activado"
 
 for svc in web-admin obsidian-sync calendar-remind; do
     echo "==> Activando $svc..."
