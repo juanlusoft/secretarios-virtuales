@@ -13,13 +13,32 @@ logger = logging.getLogger(__name__)
 
 
 class Supervisor:
-    def __init__(self, dsn: str, redis_url: str) -> None:
+    def __init__(
+        self,
+        dsn: str,
+        redis_url: str,
+        alert_bot_token: str | None = None,
+        alert_chat_id: str | None = None,
+    ) -> None:
         self._dsn = dsn
         self._redis_url = redis_url
+        self._alert_bot_token = alert_bot_token
+        self._alert_chat_id = alert_chat_id
         self._processes: dict[UUID, asyncio.subprocess.Process] = {}
         self._orchestrator_proc: asyncio.subprocess.Process | None = None
         self._orchestrator_start_time: float = 0.0
         self._orchestrator_backoff: float = 5.0
+
+    async def _send_alert(self, text: str) -> None:
+        if not self._alert_bot_token or not self._alert_chat_id:
+            return
+        try:
+            import httpx
+            url = f"https://api.telegram.org/bot{self._alert_bot_token}/sendMessage"
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                await client.post(url, json={"chat_id": self._alert_chat_id, "text": text})
+        except Exception:
+            logger.warning("Failed to send Telegram alert", exc_info=True)
 
     async def _spawn(self, employee_id: UUID) -> None:
         if employee_id in self._processes:
@@ -77,6 +96,9 @@ class Supervisor:
                         employee_id,
                         proc.returncode,
                     )
+                    await self._send_alert(
+                        f"⚠️ Secretario {employee_id} crasheó (código {proc.returncode}). Reiniciando..."
+                    )
                     await self._spawn(employee_id)
 
             # ── Monitor orchestrator process ─────────────────────────────────
@@ -89,6 +111,9 @@ class Supervisor:
                 logger.error(
                     "Orchestrator exited (code %s, uptime %.1fs). Restarting in %.0fs...",
                     exit_code, uptime, self._orchestrator_backoff,
+                )
+                await self._send_alert(
+                    f"🚨 Orquestador crasheó (código {exit_code}, uptime {uptime:.0f}s). Reiniciando en {self._orchestrator_backoff:.0f}s..."
                 )
 
                 # Reset backoff if the process ran successfully for > 30 s

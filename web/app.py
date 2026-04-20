@@ -3,7 +3,8 @@ import os
 from pathlib import Path
 
 import asyncpg
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -49,6 +50,35 @@ def create_app() -> FastAPI:
     app.include_router(messages.router)
     app.include_router(stats.router)
     app.include_router(documents.router)
+
+    @app.get("/health")
+    async def health(request: Request):
+        checks: dict[str, str] = {}
+        ok = True
+
+        svc = getattr(request.app.state, "service", None)
+        if svc is None:
+            checks["db"] = "unavailable"
+            checks["redis"] = "unavailable"
+            checks["status"] = "unavailable"
+            return JSONResponse(content=checks, status_code=503)
+
+        try:
+            await svc._pool.fetchval("SELECT 1")
+            checks["db"] = "ok"
+        except Exception:
+            checks["db"] = "error"
+            ok = False
+
+        try:
+            await svc._redis.ping()
+            checks["redis"] = "ok"
+        except Exception:
+            checks["redis"] = "error"
+            ok = False
+
+        checks["status"] = "ok" if ok else "degraded"
+        return JSONResponse(content=checks, status_code=200 if ok else 503)
 
     return app
 
