@@ -16,8 +16,9 @@ async def list_secretaries(request: Request):
     stats = await svc.get_stats()
     secretaries = await svc.list_secretaries()
     return templates.TemplateResponse(
+        request,
         "secretaries.html",
-        {"request": request, "active": "secretaries", "stats": stats, "secretaries": secretaries},
+        {"active": "secretaries", "stats": stats, "secretaries": secretaries},
     )
 
 
@@ -40,8 +41,9 @@ async def create_secretary(
     row = {"id": emp_id, "name": name, "telegram_chat_id": chat_id,
            "is_active": True, "msgs_today": 0}
     return templates.TemplateResponse(
+        request,
         "partials/secretary_row.html",
-        {"request": request, "s": row},
+        {"s": row},
         status_code=200,
     )
 

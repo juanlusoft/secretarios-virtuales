@@ -10,6 +10,7 @@ async def documents_page(request: Request):
     templates = request.app.state.templates
     docs = await svc.list_shared_docs()
     return templates.TemplateResponse(
+        request,
         "documents.html",
-        {"request": request, "active": "documents", "docs": docs},
+        {"active": "documents", "docs": docs},
     )

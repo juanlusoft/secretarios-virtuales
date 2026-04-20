@@ -10,9 +10,9 @@ async def messages_page(request: Request, to: str | None = None):
     templates = request.app.state.templates
     secretaries = await svc.list_secretaries()
     return templates.TemplateResponse(
+        request,
         "messages.html",
-        {"request": request, "active": "messages", "secretaries": secretaries,
-         "preselected": to},
+        {"active": "messages", "secretaries": secretaries, "preselected": to},
     )
 
 

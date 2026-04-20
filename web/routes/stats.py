@@ -11,7 +11,7 @@ async def stats_page(request: Request):
     stats = await svc.get_stats()
     secretaries = await svc.list_secretaries()
     return templates.TemplateResponse(
+        request,
         "stats.html",
-        {"request": request, "active": "stats", "stats": stats,
-         "secretaries": secretaries},
+        {"active": "stats", "stats": stats, "secretaries": secretaries},
     )
