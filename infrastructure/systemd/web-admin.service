@@ -1,0 +1,15 @@
+[Unit]
+Description=Secretarios Virtuales — Web Admin Panel
+After=network.target postgresql.service redis.service
+
+[Service]
+Type=simple
+User=sv
+WorkingDirectory=/opt/secretarios-virtuales
+EnvironmentFile=/opt/secretarios-virtuales/.env
+ExecStart=/opt/secretarios-virtuales/.venv/bin/python -m web
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
