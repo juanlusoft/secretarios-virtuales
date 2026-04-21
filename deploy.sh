@@ -20,6 +20,10 @@ git -C "$PROJECT_DIR" pull
 # 2. Install dependencies
 echo ""
 echo "==> Instalando dependencias..."
+if [ ! -f "$PIP" ]; then
+    echo "    Creando entorno virtual..."
+    python3 -m venv "$VENV"
+fi
 "$PIP" install -e ".[dev]" -q
 
 # 2b. Run database migrations
