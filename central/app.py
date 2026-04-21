@@ -96,7 +96,7 @@ def create_app() -> FastAPI:
         )
         servers = [s if isinstance(s, dict) else {"name": "?", "online": False} for s in servers_data]
         return request.app.state.templates.TemplateResponse(
-            "dashboard.html", {"request": request, "servers": servers}
+            name="dashboard.html", context={"request": request, "servers": servers}
         )
 
     @app.get("/partial", response_class=HTMLResponse)
@@ -107,7 +107,7 @@ def create_app() -> FastAPI:
         )
         servers = [s if isinstance(s, dict) else {"name": "?", "online": False} for s in servers_data]
         return request.app.state.templates.TemplateResponse(
-            "partials/server_grid.html", {"request": request, "servers": servers}
+            name="partials/server_grid.html", context={"request": request, "servers": servers}
         )
 
     return app
