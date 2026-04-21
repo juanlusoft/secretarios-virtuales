@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SV Central</title>
+  <script src="https://unpkg.com/htmx.org@1.9.12" defer></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; font-size: 13px; background: #0f172a; color: #e2e8f0; }
+    a { color: inherit; text-decoration: none; }
+
+    .topbar {
+      background: #1e1b4b;
+      padding: 0 20px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-bottom: 1px solid #312e81;
+    }
+    .topbar-logo { color: #a78bfa; font-weight: 700; font-size: 15px; }
+    .topbar-right { display: flex; align-items: center; gap: 12px; color: #64748b; font-size: 11px; }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #10b981; display: inline-block; }
+    .htmx-indicator { opacity: 0; transition: opacity .2s; }
+    .htmx-request .htmx-indicator { opacity: 1; }
+
+    .main { padding: 20px; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-logo">⚡ SV Central</div>
+  <div class="topbar-right">
+    <span class="status-dot htmx-indicator" id="refresh-dot"></span>
+    <span>Actualiza cada 30s</span>
+  </div>
+</div>
+
+<div class="main"
+     hx-get="/partial"
+     hx-trigger="load, every 30s"
+     hx-target="#server-grid-wrapper"
+     hx-swap="innerHTML"
+     hx-indicator="#refresh-dot">
+  <div id="server-grid-wrapper">
+    {% include "partials/server_grid.html" %}
+  </div>
+</div>
+
+</body>
+</html>

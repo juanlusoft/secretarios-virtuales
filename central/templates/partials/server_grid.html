@@ -1,0 +1,88 @@
+<div id="server-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:16px">
+  {% for s in servers %}
+  <div style="background:#1e293b;border-radius:10px;padding:16px;border-top:3px solid {% if s.online %}#10b981{% else %}#ef4444{% endif %}">
+
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <span style="color:#e2e8f0;font-weight:700;font-size:15px">{{ s.name }}</span>
+      <span style="font-size:11px;padding:3px 10px;border-radius:12px;
+        {% if s.online %}background:#064e3b;color:#10b981{% else %}background:#450a0a;color:#f87171{% endif %}">
+        {% if s.online %}● online{% else %}● offline{% endif %}
+      </span>
+    </div>
+
+    {% if s.online %}
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">
+      <div style="background:#0f172a;border-radius:6px;padding:8px">
+        <div style="color:#64748b;font-size:10px;text-transform:uppercase;margin-bottom:2px">CPU</div>
+        <div style="color:#e2e8f0;font-size:18px;font-weight:700">
+          {% if s.cpu_percent is not none %}{{ s.cpu_percent }}%{% else %}—{% endif %}
+        </div>
+      </div>
+      <div style="background:#0f172a;border-radius:6px;padding:8px">
+        <div style="color:#64748b;font-size:10px;text-transform:uppercase;margin-bottom:2px">RAM</div>
+        <div style="color:#e2e8f0;font-size:18px;font-weight:700">
+          {% if s.ram_used_gb is not none %}{{ s.ram_used_gb }} GB{% else %}—{% endif %}
+        </div>
+        {% if s.ram_total_gb is not none %}
+        <div style="color:#64748b;font-size:10px">de {{ s.ram_total_gb }} GB</div>
+        {% endif %}
+      </div>
+      <div style="background:#0f172a;border-radius:6px;padding:8px">
+        <div style="color:#64748b;font-size:10px;text-transform:uppercase;margin-bottom:2px">VRAM</div>
+        <div style="color:#a78bfa;font-size:18px;font-weight:700">
+          {% if s.vram_used_mb is not none %}{{ s.vram_used_mb }} MB{% else %}—{% endif %}
+        </div>
+        {% if s.vram_total_mb is not none %}
+        <div style="color:#64748b;font-size:10px">de {{ s.vram_total_mb }} MB</div>
+        {% endif %}
+      </div>
+      <div style="background:#0f172a;border-radius:6px;padding:8px">
+        <div style="color:#64748b;font-size:10px;text-transform:uppercase;margin-bottom:2px">Msgs hoy</div>
+        <div style="color:#06b6d4;font-size:18px;font-weight:700">
+          {% if s.msgs_today is not none %}{{ s.msgs_today }}{% else %}—{% endif %}
+        </div>
+      </div>
+    </div>
+
+    <div style="background:#0f172a;border-radius:6px;padding:8px;margin-bottom:10px;display:flex;gap:16px">
+      <div>
+        <span style="color:#64748b;font-size:10px">DB </span>
+        <span style="font-size:11px;{% if s.db == 'ok' %}color:#10b981{% else %}color:#f87171{% endif %}">{{ s.db }}</span>
+      </div>
+      <div>
+        <span style="color:#64748b;font-size:10px">Redis </span>
+        <span style="font-size:11px;{% if s.redis == 'ok' %}color:#10b981{% else %}color:#f87171{% endif %}">{{ s.redis }}</span>
+      </div>
+      <div>
+        <span style="color:#64748b;font-size:10px">Secretarios </span>
+        <span style="color:#e2e8f0;font-size:11px">
+          {% if s.secretaries_active is not none %}{{ s.secretaries_active }}/{{ s.secretaries_total }}{% else %}—{% endif %}
+        </span>
+      </div>
+    </div>
+
+    {% if s.secretaries %}
+    <div style="display:flex;flex-wrap:wrap;gap:5px">
+      {% for sec in s.secretaries %}
+      <span style="font-size:11px;padding:2px 8px;border-radius:10px;
+        {% if sec.is_active %}background:#1e3a5f;color:#93c5fd{% else %}background:#1c1917;color:#64748b{% endif %}">
+        {{ sec.name }}{% if sec.is_active and sec.msgs_today %} · {{ sec.msgs_today }}{% endif %}
+      </span>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div style="color:#64748b;font-size:13px;padding:16px 0;text-align:center">Sin conexión</div>
+    {% endif %}
+
+    <div style="margin-top:10px;text-align:right">
+      <a href="{{ s.url }}" target="_blank"
+         style="color:#64748b;font-size:11px;text-decoration:none">
+        Panel →
+      </a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
