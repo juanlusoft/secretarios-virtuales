@@ -43,18 +43,18 @@ echo "==> Configurando DNS $HOSTNAME -> túnel..."
 cloudflared tunnel route dns "$TUNNEL_NAME" "$HOSTNAME"
 
 # 6. Fichero de configuración
-CONFIG_DIR="$HOME/.cloudflared"
-mkdir -p "$CONFIG_DIR"
-cat > "$CONFIG_DIR/config.yml" << EOF
+CREDS_FILE="$HOME/.cloudflared/$TUNNEL_ID.json"
+sudo mkdir -p /etc/cloudflared
+sudo tee /etc/cloudflared/config.yml > /dev/null << EOF
 tunnel: $TUNNEL_ID
-credentials-file: $CONFIG_DIR/$TUNNEL_ID.json
+credentials-file: $CREDS_FILE
 
 ingress:
   - hostname: $HOSTNAME
     service: http://localhost:8080
   - service: http_status:404
 EOF
-echo "    Config escrita en $CONFIG_DIR/config.yml"
+echo "    Config escrita en /etc/cloudflared/config.yml"
 
 # 7. Instalar como servicio systemd
 echo ""
