@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -10,6 +11,11 @@ from shared.tools.ssh_store import SSHStore
 if TYPE_CHECKING:
     from shared.calendar.client import CalendarClient
     from shared.email.client import EmailClient
+    from shared.facts.client import FactsClient
+    from shared.tasks.client import TasksClient
+    from shared.search.duckduckgo import DuckDuckGoClient
+    from shared.location.nominatim import NominatimClient
+    from shared.youtube.transcriber import YouTubeTranscriber
 
 _MAX_OUTPUT = 4000
 _MAX_FILE = 8000
@@ -21,10 +27,25 @@ class ToolExecutor:
         ssh_store: SSHStore | None = None,
         calendar_client: CalendarClient | None = None,
         email_client: EmailClient | None = None,
+        facts_client: FactsClient | None = None,
+        tasks_client: TasksClient | None = None,
+        search_client: DuckDuckGoClient | None = None,
+        location_client: NominatimClient | None = None,
+        youtube_client: YouTubeTranscriber | None = None,
+        last_location: dict | None = None,
     ) -> None:
         self._ssh = ssh_store
         self._calendar = calendar_client
         self._email = email_client
+        self._facts = facts_client
+        self._tasks = tasks_client
+        self._search = search_client
+        self._location = location_client
+        self._youtube = youtube_client
+        self._last_location: dict | None = last_location
+
+    def update_location(self, lat: float, lon: float) -> None:
+        self._last_location = {"lat": lat, "lon": lon}
 
     async def run(self, name: str, args: dict) -> str:
         try:
@@ -54,6 +75,24 @@ class ToolExecutor:
                 return await self._email_send(args)
             if name == "email_read":
                 return await self._email_read(args)
+            if name == "fact_save":
+                return await self._fact_save(args)
+            if name == "fact_list":
+                return await self._fact_list(args)
+            if name == "task_create":
+                return await self._task_create(args)
+            if name == "task_list":
+                return await self._task_list()
+            if name == "task_done":
+                return await self._task_done(args)
+            if name == "task_update":
+                return await self._task_update(args)
+            if name == "web_search":
+                return await self._web_search(args)
+            if name == "youtube_transcribe":
+                return await self._youtube_transcribe(args)
+            if name == "nearby_search":
+                return await self._nearby_search(args)
             return f"Herramienta desconocida: {name}"
         except KeyError as e:
             return f"Error: falta el parámetro {e}"
@@ -219,3 +258,102 @@ class ToolExecutor:
         for m in messages:
             lines.append(f"📧 *De:* {m.sender}\n*Asunto:* {m.subject}\n{m.body[:300]}")
         return "\n\n---\n\n".join(lines)
+
+    async def _fact_save(self, args: dict) -> str:
+        if self._facts is None:
+            return "Servicio de datos no disponible."
+        key = args["key"]
+        value = args["value"]
+        category = args.get("category", "general")
+        await self._facts.save(key=key, value=value, category=category)
+        return f"✅ Guardado: {key} = {value} (categoría: {category})"
+
+    async def _fact_list(self, args: dict) -> str:
+        if self._facts is None:
+            return "Servicio de datos no disponible."
+        category = args.get("category")
+        facts = await self._facts.list_all(category=category)
+        if not facts:
+            return "No hay datos personales guardados."
+        lines = ["📋 Datos personales guardados:"]
+        current_cat = None
+        for f in facts:
+            if f.category != current_cat:
+                current_cat = f.category
+                lines.append(f"\n**{current_cat}:**")
+            lines.append(f"  • {f.key}: {f.value}")
+        return "\n".join(lines)
+
+    async def _task_create(self, args: dict) -> str:
+        if self._tasks is None:
+            return "Servicio de tareas no disponible."
+        title = args["title"]
+        description = args.get("description")
+        task_id = await self._tasks.create(title=title, description=description)
+        return f"✅ Tarea creada: {title} (ID: {task_id})"
+
+    async def _task_list(self) -> str:
+        if self._tasks is None:
+            return "Servicio de tareas no disponible."
+        tasks = await self._tasks.list_all()
+        if not tasks:
+            return "No hay tareas."
+        pending = [t for t in tasks if t.status == "pending"]
+        done = [t for t in tasks if t.status == "done"]
+        lines = []
+        if pending:
+            lines.append("📋 **Tareas pendientes:**")
+            for t in pending:
+                desc = f" — {t.description}" if t.description else ""
+                lines.append(f"  • [{t.id}] {t.title}{desc}")
+        if done:
+            lines.append("\n✅ **Completadas:**")
+            for t in done[-5:]:
+                lines.append(f"  ~~{t.title}~~")
+        return "\n".join(lines) if lines else "No hay tareas."
+
+    async def _task_done(self, args: dict) -> str:
+        if self._tasks is None:
+            return "Servicio de tareas no disponible."
+        task_id = args["task_id"]
+        ok = await self._tasks.mark_done(task_id=task_id)
+        return f"✅ Tarea {task_id} marcada como completada." if ok else f"No encontré la tarea {task_id}."
+
+    async def _task_update(self, args: dict) -> str:
+        if self._tasks is None:
+            return "Servicio de tareas no disponible."
+        task_id = args["task_id"]
+        title = args.get("title")
+        description = args.get("description")
+        ok = await self._tasks.update(task_id=task_id, title=title, description=description)
+        return f"✅ Tarea {task_id} actualizada." if ok else f"No encontré la tarea {task_id}."
+
+    async def _web_search(self, args: dict) -> str:
+        if self._search is None:
+            return "Búsqueda web no disponible."
+        query = args["query"]
+        max_results = min(int(args.get("max_results", 5)), 10)
+        return await self._search.search(query=query, max_results=max_results)
+
+    async def _youtube_transcribe(self, args: dict) -> str:
+        if self._youtube is None:
+            return "Transcripción de YouTube no disponible."
+        url = args["url"]
+        save_path = args.get("save_path", f"transcripciones/video_{datetime.now().strftime('%Y-%m-%d_%H%M%S')}.md")
+        text = await self._youtube.transcribe(url=url)
+        full_path = Path("./data/vault") / save_path
+        full_path.parent.mkdir(parents=True, exist_ok=True)
+        full_path.write_text(f"# Transcripción\n\nFuente: {url}\nFecha: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n---\n\n{text}")
+        preview = text[:500] + "..." if len(text) > 500 else text
+        return f"✅ Transcripción guardada en {save_path} ({len(text)} chars)\n\nExtracto:\n{preview}"
+
+    async def _nearby_search(self, args: dict) -> str:
+        if self._location is None:
+            return "Búsqueda de ubicación no disponible."
+        if self._last_location is None:
+            return "No tengo tu ubicación. Envíame tu ubicación por Telegram primero (botón 📎 → Ubicación)."
+        query = args["query"]
+        radius_m = int(args.get("radius_m", 1000))
+        lat = self._last_location["lat"]
+        lon = self._last_location["lon"]
+        return await self._location.nearby(lat=lat, lon=lon, query=query, radius_m=radius_m)

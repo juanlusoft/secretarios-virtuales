@@ -194,4 +194,131 @@ TOOL_DEFINITIONS: list[dict] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "fact_save",
+            "description": "Guarda un dato personal importante del usuario para recordarlo siempre (ej: 'médico', 'Dr. García'; 'coche', 'Toyota Corolla 2020'). También úsalo para guardar preferencias detectadas en la conversación. La clave debe ser única y descriptiva.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "key": {"type": "string", "description": "Clave única del dato (ej: 'médico', 'coche', 'preferencia_idioma')"},
+                    "value": {"type": "string", "description": "Valor del dato"},
+                    "category": {"type": "string", "description": "Categoría: 'personal', 'preference', 'work', 'health', 'general'"},
+                },
+                "required": ["key", "value"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "fact_list",
+            "description": "Lista los datos personales guardados del usuario. Úsalo para recordar información antes de responder.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "category": {"type": "string", "description": "Filtrar por categoría (opcional): 'personal', 'preference', 'work', 'health', 'general'"},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "task_create",
+            "description": "Crea una nueva tarea pendiente.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string", "description": "Título de la tarea"},
+                    "description": {"type": "string", "description": "Descripción opcional de la tarea"},
+                },
+                "required": ["title"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "task_list",
+            "description": "Lista las tareas del usuario con su estado (pending/done).",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "task_done",
+            "description": "Marca una tarea como completada por su ID.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "UUID de la tarea"},
+                },
+                "required": ["task_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "task_update",
+            "description": "Actualiza el título o descripción de una tarea.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "task_id": {"type": "string", "description": "UUID de la tarea"},
+                    "title": {"type": "string", "description": "Nuevo título (opcional)"},
+                    "description": {"type": "string", "description": "Nueva descripción (opcional)"},
+                },
+                "required": ["task_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "web_search",
+            "description": "Busca información en la web usando DuckDuckGo. Úsalo para responder preguntas que requieren información actualizada.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Consulta de búsqueda"},
+                    "max_results": {"type": "integer", "description": "Número máximo de resultados (1-10, por defecto 5)"},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "youtube_transcribe",
+            "description": "Descarga y transcribe un vídeo de YouTube o podcast. Guarda la transcripción en el vault del agente.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "URL del vídeo de YouTube o podcast"},
+                    "save_path": {"type": "string", "description": "Ruta donde guardar la transcripción (ej: 'transcripciones/podcast_2026-04-21.md')"},
+                },
+                "required": ["url"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "nearby_search",
+            "description": "Busca lugares cercanos a la última ubicación GPS conocida del usuario.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Tipo de lugar a buscar (ej: 'farmacia', 'restaurante', 'supermercado')"},
+                    "radius_m": {"type": "integer", "description": "Radio de búsqueda en metros (por defecto 1000)"},
+                },
+                "required": ["query"],
+            },
+        },
+    },
 ]
