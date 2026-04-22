@@ -24,6 +24,7 @@ class SecretaryRow:
     telegram_chat_id: str | None
     is_active: bool
     msgs_today: int
+    tools_enabled: bool = False
 
 
 class WebAdminService:
@@ -70,7 +71,11 @@ class WebAdminService:
                     e.name,
                     e.telegram_chat_id,
                     e.is_active,
-                    COUNT(c.id) FILTER (WHERE c.created_at >= CURRENT_DATE)::int AS msgs_today
+                    COUNT(c.id) FILTER (WHERE c.created_at >= CURRENT_DATE)::int AS msgs_today,
+                    EXISTS(
+                        SELECT 1 FROM credentials cr
+                        WHERE cr.employee_id = e.id AND cr.service_type = 'tools_enabled'
+                    ) AS tools_enabled
                 FROM employees e
                 LEFT JOIN conversations c ON c.employee_id = e.id
                 WHERE NOT e.is_orchestrator
@@ -85,6 +90,7 @@ class WebAdminService:
                 telegram_chat_id=r["telegram_chat_id"],
                 is_active=r["is_active"],
                 msgs_today=r["msgs_today"] or 0,
+                tools_enabled=r["tools_enabled"],
             )
             for r in rows
         ]
