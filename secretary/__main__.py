@@ -16,6 +16,11 @@ from shared.db.pool import DatabasePool
 from shared.llm.chat import ChatClient
 from shared.llm.embeddings import EmbeddingClient
 from shared.tools import SSHStore, ToolExecutor
+from shared.facts.client import FactsClient
+from shared.tasks.client import TasksClient
+from shared.search.duckduckgo import DuckDuckGoClient
+from shared.location.nominatim import NominatimClient
+from shared.youtube.transcriber import YouTubeTranscriber
 
 load_dotenv()
 logging.basicConfig(
@@ -150,6 +155,26 @@ async def main(employee_id_str: str) -> None:
         except Exception as e:
             logging.warning("Failed to create email client: %s", e)
 
+    # Load last known location
+    raw_conn6 = await asyncpg.connect(app_dsn)
+    async with raw_conn6.transaction():
+        await raw_conn6.execute(
+            "SELECT set_config('app.current_employee_id', $1, true)",
+            str(employee_id),
+        )
+        location_enc = await raw_conn6.fetchval(
+            "SELECT encrypted FROM credentials WHERE employee_id=$1 AND service_type='last_location'",
+            employee_id,
+        )
+    await raw_conn6.close()
+
+    last_location = None
+    if location_enc:
+        try:
+            last_location = json.loads(store.decrypt(location_enc))
+        except Exception:
+            pass
+
     pool = DatabasePool(app_dsn, employee_id)
     await pool.connect()
 
@@ -157,13 +182,19 @@ async def main(employee_id_str: str) -> None:
     if tools_enabled:
         ssh_store = SSHStore(pool=pool, employee_id=employee_id, store=store)
 
-    executor: ToolExecutor | None = None
-    if tools_enabled or email_client is not None or calendar_client is not None:
-        executor = ToolExecutor(
-            ssh_store=ssh_store,
-            calendar_client=calendar_client,
-            email_client=email_client,
-        )
+    whisper = WhisperClient(base_url=os.environ["WHISPER_URL"])
+
+    executor = ToolExecutor(
+        ssh_store=ssh_store,
+        calendar_client=calendar_client,
+        email_client=email_client,
+        facts_client=FactsClient(pool=pool, employee_id=employee_id),
+        tasks_client=TasksClient(pool=pool, employee_id=employee_id),
+        search_client=DuckDuckGoClient(),
+        location_client=NominatimClient(),
+        youtube_client=YouTubeTranscriber(whisper=whisper),
+        last_location=last_location,
+    )
 
     agent = SecretaryAgent(
         employee_id=employee_id,
@@ -180,7 +211,7 @@ async def main(employee_id_str: str) -> None:
             api_key=os.environ["VLLM_API_KEY"],
             model=os.environ["EMBEDDING_MODEL"],
         ),
-        whisper=WhisperClient(base_url=os.environ["WHISPER_URL"]),
+        whisper=whisper,
         documents_dir=Path(os.environ.get("DOCUMENTS_DIR", "./data/documents")),
         fernet_key=fernet_key,
         redis_url=os.environ["REDIS_URL"],

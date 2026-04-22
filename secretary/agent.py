@@ -23,6 +23,7 @@ from secretary.handlers.document import handle_document
 from secretary.handlers.email import handle_check_email
 from secretary.handlers.onboarding import build_onboarding_handler
 from secretary.handlers.photo import handle_photo
+from secretary.handlers.location import handle_location
 from secretary.handlers.text import handle_text
 from secretary.memory import MemoryManager
 from shared.audio.whisper import WhisperClient
@@ -481,6 +482,19 @@ class SecretaryAgent:
             response = f"❌ No pude analizar la imagen: {exc}"
         await update.message.reply_text(response)  # type: ignore[union-attr]
 
+    async def _handle_location(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not await self._is_authorized(update):
+            return
+        response = await handle_location(
+            update=update,
+            context=context,
+            employee_id=self._employee_id,
+            pool=self._pool,
+            store=self._store,
+            executor=self._executor,
+        )
+        await update.message.reply_text(response)  # type: ignore[union-attr]
+
     async def _listen_redis(self, app: Application) -> None:  # type: ignore[type-arg]
         import json
         channel = f"secretary.{self._employee_id}"
@@ -562,6 +576,7 @@ class SecretaryAgent:
         app.add_handler(MessageHandler(filters.VOICE, self._handle_voice))
         app.add_handler(MessageHandler(filters.Document.ALL, self._handle_document))
         app.add_handler(MessageHandler(filters.PHOTO, self._handle_photo))
+        app.add_handler(MessageHandler(filters.LOCATION, self._handle_location))
 
         logger.info(
             "Secretary %s starting (chat_id=%s)", self._employee_name, self._allowed_chat_id
@@ -593,12 +608,20 @@ def _build_tool_system(employee_name: str, profile: dict | None, cal_context: st
     tool_names = ", ".join(t["function"]["name"] for t in TOOL_DEFINITIONS)
     now_str = _dt.now().strftime("%A %d/%m/%Y %H:%M")
     base = (
-        f"Eres {bot_name}, asistente técnico personal de {preferred_name}. "
+        f"Eres {bot_name}, asistente personal de {preferred_name}. "
         f"Responde en {language}. "
-        f"Tienes acceso a herramientas de sistema: {tool_names}. "
+        f"Tienes acceso a herramientas: {tool_names}. "
         "Úsalas para completar las tareas. Ejecuta en silencio y da un resumen al final. "
-        "NUNCA uses chino ni muestres razonamiento interno."
-        f"\n\nFecha y hora actual: {now_str}"
+        "NUNCA uses chino ni muestres razonamiento interno.\n"
+        f"Fecha y hora actual: {now_str}\n\n"
+        "INSTRUCCIONES ESPECIALES:\n"
+        "- Cuando el usuario mencione información personal importante (médico, coche, domicilio, "
+        "preferencias, contactos clave), usa fact_save para guardarla automáticamente.\n"
+        "- Antes de responder preguntas sobre el usuario, consulta fact_list para recordar datos previos.\n"
+        "- Para tareas y pendientes del usuario, usa task_create/task_list/task_done.\n"
+        "- Para búsquedas web, usa web_search.\n"
+        "- Para transcribir vídeos o podcasts, usa youtube_transcribe.\n"
+        "- Si el usuario pregunta por lugares cercanos, usa nearby_search (requiere ubicación GPS previa)."
     )
     if cal_context:
         base = f"{base}\n\n{cal_context}"
