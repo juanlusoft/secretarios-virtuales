@@ -48,6 +48,15 @@ textarea.form-input { resize: vertical; min-height: 80px; }
 .checkbox-pill { display: flex; align-items: center; gap: 6px; color: #e2e8f0; font-size: 12px; background: #0f172a; padding: 5px 10px; border-radius: 20px; cursor: pointer; }
 input[type=checkbox] { accent-color: #7c3aed; }
 
+.ota-panel { position:fixed; bottom:0; left:0; width:180px; background:#0f172a; border-top:1px solid #1e293b; padding:8px 12px; z-index:20; }
+.btn-ota { width:100%; background:#1e3a5f; color:#93c5fd; border:none; padding:7px 0; border-radius:6px; font-size:12px; cursor:pointer; }
+.btn-ota:hover { background:#1e40af; }
+.btn-ota.htmx-request { opacity:.6; cursor:wait; }
+.ota-result { position:fixed; bottom:0; left:192px; max-width:500px; background:#0f172a; border:1px solid #1e293b; border-radius:8px; padding:12px; z-index:20; font-size:11px; max-height:60vh; overflow-y:auto; min-width:300px; }
+.ota-ok { color:#10b981; }
+.ota-err { color:#f87171; }
+.ota-ok pre, .ota-err pre { color:#94a3b8; margin-top:4px; white-space:pre-wrap; word-break:break-all; }
+
 .alert-success { background: #064e3b; color: #10b981; padding: 10px 14px; border-radius: 6px; margin-bottom: 12px; }
 .htmx-indicator { opacity: 0; transition: opacity .2s; }
 .htmx-request .htmx-indicator { opacity: 1; }

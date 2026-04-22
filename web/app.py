@@ -12,7 +12,7 @@ from fastapi.templating import Jinja2Templates
 
 from web.db import create_admin_pool
 from web.service import WebAdminService
-from web.routes import secretaries, messages, stats, documents
+from web.routes import secretaries, messages, stats, documents, update
 
 
 @asynccontextmanager
@@ -52,6 +52,7 @@ def create_app() -> FastAPI:
     app.include_router(messages.router)
     app.include_router(stats.router)
     app.include_router(documents.router)
+    app.include_router(update.router)
 
     @app.get("/metrics")
     async def metrics():

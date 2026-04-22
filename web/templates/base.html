@@ -19,6 +19,17 @@
   <div class="sidebar-version">v0.1 · sin auth</div>
 </nav>
 
+<div class="ota-panel">
+  <button class="btn-ota"
+          hx-post="/update"
+          hx-target="#ota-result"
+          hx-swap="innerHTML"
+          hx-indicator="this">
+    🔄 Actualizar
+  </button>
+</div>
+<div id="ota-result"></div>
+
 <main class="main">
   {% block content %}{% endblock %}
 </main>
