@@ -9,3 +9,7 @@ logs/
 .ruff_cache/
 .pytest_cache/
 .superpowers/
+*.jpg
+*.jpeg
+*.png
+*.gif
