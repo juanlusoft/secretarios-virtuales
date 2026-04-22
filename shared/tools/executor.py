@@ -256,7 +256,14 @@ class ToolExecutor:
             return "No hay emails nuevos."
         lines = []
         for m in messages:
-            lines.append(f"📧 *De:* {m.sender}\n*Asunto:* {m.subject}\n{m.body[:300]}")
+            reply_addr = _extract_email_address(m.sender)
+            lines.append(
+                f"📧 De: {m.sender}\n"
+                f"➤ DIRECCIÓN DE RESPUESTA: {reply_addr}\n"
+                f"Asunto: {m.subject}\n"
+                f"Fecha: {m.date}\n\n"
+                f"{m.body[:500]}"
+            )
         return "\n\n---\n\n".join(lines)
 
     async def _fact_save(self, args: dict) -> str:
@@ -357,3 +364,14 @@ class ToolExecutor:
         lat = self._last_location["lat"]
         lon = self._last_location["lon"]
         return await self._location.nearby(lat=lat, lon=lon, query=query, radius_m=radius_m)
+
+
+def _extract_email_address(sender: str) -> str:
+    import re
+    match = re.search(r"<([^>]+)>", sender)
+    if match:
+        return match.group(1)
+    match = re.search(r"[\w.+-]+@[\w.-]+\.\w+", sender)
+    if match:
+        return match.group(0)
+    return sender.strip()
