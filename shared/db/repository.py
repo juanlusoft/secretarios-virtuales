@@ -3,7 +3,7 @@ from uuid import UUID
 
 import asyncpg
 
-from .models import Conversation, Document, Task
+from .models import Conversation, Document, Fact, Task
 
 
 class Repository:
@@ -156,6 +156,82 @@ class Repository:
                 status=r["status"],
                 created_at=r["created_at"],
             )
+            for r in rows
+        ]
+
+    async def save_fact(self, key: str, value: str, category: str = "general") -> None:
+        await self._conn.execute(
+            """
+            INSERT INTO facts (employee_id, key, value, category)
+            VALUES ($1, $2, $3, $4)
+            ON CONFLICT (employee_id, key) DO UPDATE SET value = $3, category = $4
+            """,
+            self._employee_id, key, value, category,
+        )
+
+    async def list_facts(self, category: str | None = None) -> list[Fact]:
+        from shared.db.models import Fact
+        if category:
+            rows = await self._conn.fetch(
+                "SELECT id, employee_id, key, value, category, created_at FROM facts "
+                "WHERE employee_id = $1 AND category = $2 ORDER BY key",
+                self._employee_id, category,
+            )
+        else:
+            rows = await self._conn.fetch(
+                "SELECT id, employee_id, key, value, category, created_at FROM facts "
+                "WHERE employee_id = $1 ORDER BY category, key",
+                self._employee_id,
+            )
+        return [
+            Fact(id=r["id"], employee_id=r["employee_id"], key=r["key"],
+                 value=r["value"], category=r["category"], created_at=r["created_at"])
+            for r in rows
+        ]
+
+    async def delete_fact(self, key: str) -> bool:
+        result = await self._conn.execute(
+            "DELETE FROM facts WHERE employee_id = $1 AND key = $2",
+            self._employee_id, key,
+        )
+        return result != "DELETE 0"
+
+    async def mark_task_done(self, task_id: str) -> bool:
+        result = await self._conn.execute(
+            "UPDATE tasks SET status = 'done' WHERE employee_id = $1 AND id = $2::uuid",
+            self._employee_id, task_id,
+        )
+        return result != "UPDATE 0"
+
+    async def update_task(self, task_id: str, title: str | None = None, description: str | None = None) -> bool:
+        if title is None and description is None:
+            return False
+        if title is not None and description is not None:
+            result = await self._conn.execute(
+                "UPDATE tasks SET title = $2, description = $3 WHERE employee_id = $1 AND id = $4::uuid",
+                self._employee_id, title, description, task_id,
+            )
+        elif title is not None:
+            result = await self._conn.execute(
+                "UPDATE tasks SET title = $2 WHERE employee_id = $1 AND id = $3::uuid",
+                self._employee_id, title, task_id,
+            )
+        else:
+            result = await self._conn.execute(
+                "UPDATE tasks SET description = $2 WHERE employee_id = $1 AND id = $3::uuid",
+                self._employee_id, description, task_id,
+            )
+        return result != "UPDATE 0"
+
+    async def get_all_tasks(self) -> list[Task]:
+        rows = await self._conn.fetch(
+            "SELECT id, employee_id, title, description, status, created_at FROM tasks "
+            "WHERE employee_id = $1 ORDER BY status, created_at ASC",
+            self._employee_id,
+        )
+        return [
+            Task(id=r["id"], employee_id=r["employee_id"], title=r["title"],
+                 description=r["description"], status=r["status"], created_at=r["created_at"])
             for r in rows
         ]
 

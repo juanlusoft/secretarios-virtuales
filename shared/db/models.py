@@ -53,6 +53,16 @@ class Task:
 
 
 @dataclass
+class Fact:
+    id: UUID
+    employee_id: UUID
+    key: str
+    value: str
+    category: str
+    created_at: datetime
+
+
+@dataclass
 class VaultNote:
     id: UUID
     employee_id: UUID
