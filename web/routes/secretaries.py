@@ -53,3 +53,14 @@ async def deactivate_secretary(request: Request, employee_id: str):
     svc = request.app.state.service
     await svc.deactivate_secretary(employee_id)
     return HTMLResponse("")
+
+
+@router.post("/secretaries/{employee_id}/tools", response_class=HTMLResponse)
+async def toggle_tools(request: Request, employee_id: str):
+    svc = request.app.state.service
+    templates = request.app.state.templates
+    enabled = await svc.toggle_tools(employee_id)
+    s = next((s for s in await svc.list_secretaries() if s.id == employee_id), None)
+    if s is None:
+        return HTMLResponse("")
+    return templates.TemplateResponse(request, "partials/secretary_row.html", {"s": s})

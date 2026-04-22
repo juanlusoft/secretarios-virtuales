@@ -140,6 +140,25 @@ class WebAdminService:
             json.dumps({"event": "destroyed", "employee_id": employee_id}),
         )
 
+    async def toggle_tools(self, employee_id: str) -> bool:
+        async with self._pool.acquire() as conn:
+            existing = await conn.fetchval(
+                "SELECT encrypted FROM credentials WHERE employee_id=$1::uuid AND service_type='tools_enabled'",
+                employee_id,
+            )
+            if existing:
+                await conn.execute(
+                    "DELETE FROM credentials WHERE employee_id=$1::uuid AND service_type='tools_enabled'",
+                    employee_id,
+                )
+                return False
+            else:
+                await conn.execute(
+                    "INSERT INTO credentials (employee_id, service_type, encrypted) VALUES ($1::uuid, $2, $3)",
+                    employee_id, "tools_enabled", self._store.encrypt("true"),
+                )
+                return True
+
     async def send_message(self, employee_ids: list[str], text: str) -> None:
         payload = json.dumps({"type": "admin_message", "content": text})
         for emp_id in employee_ids:
