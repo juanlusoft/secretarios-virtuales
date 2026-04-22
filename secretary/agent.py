@@ -376,8 +376,12 @@ class SecretaryAgent:
             cal_context = await _build_calendar_context(self._calendar)
             system = _build_tool_system(self._employee_name, self._profile, cal_context)
             self._pending_original_msg = msg
+            async with self._pool.acquire() as conn:
+                repo = Repository(conn, self._employee_id)
+                recent = await repo.get_recent_conversations(limit=10)
+            history = [{"role": c.role, "content": c.content} for c in reversed(recent)]
             response = await self._run_tool_loop(
-                messages=[{"role": "user", "content": msg}],
+                messages=history + [{"role": "user", "content": msg}],
                 system=system,
                 used_tools=[],
             )
