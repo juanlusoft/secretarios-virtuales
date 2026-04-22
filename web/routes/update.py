@@ -38,9 +38,10 @@ async def ota_update():
         try:
             rc, out = await _run(cmd, _PROJECT_DIR)
             status = "✓" if rc == 0 else "✗"
+            step_cls = "ota-ok" if rc == 0 else "ota-err"
             if rc != 0:
                 ok = False
-            lines.append(f'<div class="ota-step {\"ota-ok\" if rc == 0 else \"ota-err\"}">'
+            lines.append(f'<div class="ota-step {step_cls}">'
                          f'<b>{status} {label}</b>'
                          + (f'<pre>{out.strip()}</pre>' if out.strip() else '')
                          + '</div>')
