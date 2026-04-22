@@ -151,13 +151,18 @@ class WebAdminService:
                     "DELETE FROM credentials WHERE employee_id=$1::uuid AND service_type='tools_enabled'",
                     employee_id,
                 )
-                return False
+                enabled = False
             else:
                 await conn.execute(
                     "INSERT INTO credentials (employee_id, service_type, encrypted) VALUES ($1::uuid, $2, $3)",
                     employee_id, "tools_enabled", self._store.encrypt("true"),
                 )
-                return True
+                enabled = True
+
+        msg = "⚡ Superpower ON — ahora tengo acceso a herramientas del sistema." if enabled else "🔒 Superpower OFF — herramientas desactivadas."
+        await self._redis.publish(f"secretary.{employee_id}", json.dumps({"type": "admin_message", "content": msg}))
+        await self._redis.publish("secretary.lifecycle", json.dumps({"event": "tools_updated", "employee_id": employee_id}))
+        return enabled
 
     async def send_message(self, employee_ids: list[str], text: str) -> None:
         payload = json.dumps({"type": "admin_message", "content": text})

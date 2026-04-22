@@ -147,6 +147,11 @@ class Supervisor:
                         await self._spawn(employee_id)
                     elif data["event"] == "destroyed":
                         await self._terminate(employee_id)
+                    elif data["event"] == "tools_updated":
+                        await asyncio.sleep(2)
+                        await self._terminate(employee_id)
+                        await self._spawn(employee_id)
+                        logger.info("Secretary %s restarted after tools_updated", employee_id)
             except asyncio.CancelledError:
                 raise
             except Exception:
