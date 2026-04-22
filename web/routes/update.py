@@ -30,8 +30,8 @@ async def ota_update():
         ("git pull", ["git", "-c", "safe.directory=*", "pull"]),
         ("pip install", [str(_PROJECT_DIR / ".venv" / "bin" / "pip"), "install", "-e", ".", "-q"]),
         ("migraciones", [str(_PROJECT_DIR / ".venv" / "bin" / "python"), "-m", "shared.db.migrate"]),
-        ("reiniciar web-admin", ["sudo", "systemctl", "restart", "web-admin"]),
         ("reiniciar supervisor", ["sudo", "systemctl", "try-restart", "supervisor"]),
+        ("reiniciar web-admin", ["sudo", "systemd-run", "--on-active=2", "systemctl", "restart", "web-admin"]),
 
     ]
 
