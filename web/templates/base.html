@@ -24,11 +24,14 @@
           hx-post="/update"
           hx-target="#ota-result"
           hx-swap="innerHTML"
-          hx-indicator="this">
+          hx-indicator="this"
+          onclick="document.getElementById('ota-result').style.display='block'">
     🔄 Actualizar
   </button>
 </div>
-<div id="ota-result"></div>
+<div id="ota-result" style="display:none" onclick="this.style.display='none'">
+  <div style="font-size:10px;color:#64748b;margin-bottom:6px;text-align:right">clic para cerrar ✕</div>
+</div>
 
 <main class="main">
   {% block content %}{% endblock %}
