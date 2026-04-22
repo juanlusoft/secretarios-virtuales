@@ -30,6 +30,14 @@ async def ota_update():
         ("git pull", ["git", "pull"]),
         ("pip install", [str(_PROJECT_DIR / ".venv" / "bin" / "pip"), "install", "-e", ".", "-q"]),
         ("migraciones", [str(_PROJECT_DIR / ".venv" / "bin" / "python"), "-m", "shared.db.migrate"]),
+        ("instalar timers", ["sudo", "bash", "-c",
+                             "cp /opt/secretarios-virtuales/infrastructure/systemd/weekly-summary.service "
+                             "/opt/secretarios-virtuales/infrastructure/systemd/weekly-summary.timer "
+                             "/opt/secretarios-virtuales/infrastructure/systemd/morning-digest.service "
+                             "/opt/secretarios-virtuales/infrastructure/systemd/morning-digest.timer "
+                             "/etc/systemd/system/ && systemctl daemon-reload && "
+                             "systemctl enable weekly-summary.timer morning-digest.timer && "
+                             "systemctl start weekly-summary.timer morning-digest.timer"]),
         ("reiniciar servicios", ["sudo", "systemctl", "restart",
                                  "secretary@*", "orchestrator", "supervisor", "web-admin"]),
     ]
