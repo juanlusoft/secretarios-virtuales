@@ -27,7 +27,7 @@ async def ota_update():
     ok = True
 
     steps = [
-        ("git pull", ["git", "pull"]),
+        ("git pull", ["git", "-c", "safe.directory=*", "pull"]),
         ("pip install", [str(_PROJECT_DIR / ".venv" / "bin" / "pip"), "install", "-e", ".", "-q"]),
         ("migraciones", [str(_PROJECT_DIR / ".venv" / "bin" / "python"), "-m", "shared.db.migrate"]),
         ("instalar timers", ["sudo", "bash", "-c",
