@@ -1,4 +1,5 @@
 import asyncio
+import html
 import json
 import logging
 from contextlib import suppress
@@ -531,13 +532,16 @@ class SecretaryAgent:
                     if new_messages:
                         lines = []
                         for m in new_messages:
-                            lines.append(f"📧 *{m.sender}*\n_{m.subject}_")
+                            lines.append(
+                                f"📧 <b>{html.escape(m.sender)}</b>\n"
+                                f"<i>{html.escape(m.subject)}</i>"
+                            )
                             seen.add(str(m.uid))
                         text = f"📬 Tienes {len(new_messages)} email(s) nuevo(s):\n\n" + "\n\n".join(lines)
                         await app.bot.send_message(
                             chat_id=self._allowed_chat_id,
                             text=text,
-                            parse_mode="Markdown",
+                            parse_mode="HTML",
                         )
                         # Save updated seen UIDs
                         encrypted = self._store.encrypt(json.dumps(list(seen)))
@@ -547,7 +551,7 @@ class SecretaryAgent:
             except asyncio.CancelledError:
                 raise
             except Exception:
-                logger.exception("Email poller error")
+                logger.exception("Email poller error for secretary %s", self._employee_id)
             await asyncio.sleep(interval)
 
     async def run(self, bot_token: str) -> None:
